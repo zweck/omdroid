@@ -1,0 +1,4 @@
+<!-- Omdroid concept c mark -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<path fill="#7aa2f7" d="M 96 16 H 224 V 64 H 96 Z M 320 16 H 416 V 64 H 320 Z M 80 32 H 96 V 480 H 80 Z M 416 32 H 432 V 480 H 416 Z M 64 48 H 80 V 464 H 64 Z M 432 48 H 448 V 464 H 432 Z M 96 64 H 112 V 496 H 96 Z M 400 64 H 416 V 496 H 400 Z M 144 96 H 256 V 416 H 144 Z M 288 96 H 368 V 240 H 288 Z M 288 272 H 368 V 416 H 288 Z M 112 448 H 400 V 496 H 112 Z"/>
+</svg>

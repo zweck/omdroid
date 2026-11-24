@@ -1,0 +1,5 @@
+<!-- Omdroid concept b icon tile -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="768" viewBox="0 0 768 768">
+<rect x="0" y="0" width="768" height="768" fill="#1a1b26"/>
+<path fill="#7aa2f7" d="M 144 128 H 336 V 192 H 144 Z M 432 128 H 624 V 192 H 432 Z M 144 192 H 240 V 448 H 144 Z M 272 192 H 368 V 256 H 272 Z M 400 192 H 496 V 256 H 400 Z M 528 192 H 624 V 448 H 528 Z M 304 256 H 464 V 320 H 304 Z M 336 320 H 432 V 448 H 336 Z M 320 480 H 432 V 528 H 320 Z M 304 496 H 320 V 624 H 304 Z M 432 496 H 448 V 624 H 432 Z M 320 528 H 352 V 640 H 320 Z M 400 528 H 432 V 640 H 400 Z M 352 592 H 400 V 640 H 352 Z"/>
+</svg>

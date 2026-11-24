@@ -1,0 +1,8 @@
+<!-- foreground -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path
+        android:fillColor="#7aa2f7"
+        android:pathData="M 34 24 H 50 V 30 H 34 Z M 62 24 H 74 V 30 H 62 Z M 32 26 H 34 V 82 H 32 Z M 74 26 H 76 V 82 H 74 Z M 30 28 H 32 V 80 H 30 Z M 76 28 H 78 V 80 H 76 Z M 34 30 H 36 V 84 H 34 Z M 72 30 H 74 V 84 H 72 Z M 40 34 H 54 V 74 H 40 Z M 58 34 H 68 V 52 H 58 Z M 58 56 H 68 V 74 H 58 Z M 36 78 H 72 V 84 H 36 Z"/>
+</vector>
