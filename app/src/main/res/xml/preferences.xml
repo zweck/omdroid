@@ -3,40 +3,26 @@
 
     <PreferenceCategory app:title="Display">
         <ListPreference
-            app:key="scale_factor"
-            app:title="Resolution Scale"
-            app:entries="@array/scale_entries"
-            app:entryValues="@array/scale_values"
-            app:defaultValue="1.0" />
+            app:key="ui_scale"
+            app:title="Interface Scale"
+            app:entries="@array/ui_scale_entries"
+            app:entryValues="@array/ui_scale_values"
+            app:defaultValue="auto"
+            app:summary="Hyprland and GTK/Qt applications" />
 
         <ListPreference
-            app:key="orientation"
-            app:title="Orientation"
-            app:entries="@array/orientation_entries"
-            app:entryValues="@array/orientation_values"
-            app:defaultValue="auto" />
-
-        <EditTextPreference
-            app:key="dpi_override"
-            app:title="DPI Override"
-            app:summary="Leave empty for auto-detection" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:title="Desktop Environment">
-        <ListPreference
-            app:key="de"
-            app:title="Desktop Environment"
-            app:entries="@array/de_entries"
-            app:entryValues="@array/de_values"
-            app:defaultValue="phosh"
-            app:summary="Changing DE will install packages on next launch" />
+            app:key="refresh_mhz"
+            app:title="Panel Refresh"
+            app:entries="@array/refresh_entries"
+            app:entryValues="@array/refresh_values"
+            app:defaultValue="120000" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Storage">
         <SwitchPreferenceCompat
             app:key="bind_sdcard"
             app:title="Mount /sdcard"
-            app:summary="Access Android storage from postmarketOS at ~/sdcard"
+            app:summary="Reach Android storage from Omarchy at ~/Phone"
             app:defaultValue="false" />
     </PreferenceCategory>
 
@@ -50,12 +36,12 @@
         <EditTextPreference
             app:key="custom_startup"
             app:title="Custom Startup Script"
-            app:summary="Path to script run before Phosh (inside rootfs)" />
+            app:summary="Path to script run instead of the Omarchy session (inside rootfs)" />
 
         <Preference
             app:key="reset_factory"
             app:title="Reset to Factory"
-            app:summary="Re-extract rootfs from bundled image" />
+            app:summary="Re-extract the Omarchy rootfs from the bundled image" />
     </PreferenceCategory>
 
 </PreferenceScreen>

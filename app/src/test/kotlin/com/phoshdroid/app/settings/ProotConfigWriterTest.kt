@@ -20,7 +20,7 @@ class ProotConfigWriterTest {
                 scaleFactor = 1.0f,
                 orientation = Orientation.AUTO,
                 dpiOverride = null,
-                desktopEnvironment = DesktopEnvironment.PHOSH
+                desktopEnvironment = DesktopEnvironment.OMARCHY
             )
         )
 
@@ -28,7 +28,7 @@ class ProotConfigWriterTest {
         val content = configFile.readText()
         assertTrue(content.contains("SCALE_FACTOR=1.0"))
         assertTrue(content.contains("ORIENTATION=auto"))
-        assertTrue(content.contains("DE=phosh"))
+        assertTrue(content.contains("DE=omarchy"))
         assertFalse(content.contains("DPI_OVERRIDE"))
     }
 
@@ -42,7 +42,7 @@ class ProotConfigWriterTest {
                 scaleFactor = 1.5f,
                 orientation = Orientation.LANDSCAPE,
                 dpiOverride = 320,
-                desktopEnvironment = DesktopEnvironment.PHOSH
+                desktopEnvironment = DesktopEnvironment.OMARCHY
             )
         )
 

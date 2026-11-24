@@ -1,52 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Phoshdroid</string>
-    <string name="notification_title">Phoshdroid is running</string>
-    <string name="notification_text">postmarketOS desktop is active</string>
+    <string name="app_name">Omdroid</string>
+    <string name="notification_title">Omarchy desktop is running</string>
+    <string name="notification_text">Hyprland session active</string>
     <string name="action_settings">Settings</string>
     <string name="action_stop">Stop</string>
     <string name="extracting_termux">Extracting Termux environment\u2026</string>
-    <string name="extracting_rootfs">Extracting postmarketOS\u2026</string>
+    <string name="extracting_rootfs">Extracting Omarchy\u2026</string>
     <string name="preparing_desktop">Preparing your desktop\u2026</string>
     <string name="starting_desktop">Starting desktop\u2026</string>
     <string name="error_no_space">Not enough storage space. Need %1$s, have %2$s.</string>
     <string name="error_proot_failed">proot failed to start. Tap to copy logs.</string>
-    <string name="welcome_toast">Pull down from top for Phosh settings. Access Phoshdroid settings from the notification.</string>
+    <string name="error_session_ended">The desktop session ended.</string>
+    <string name="error_session_stopped_unexpectedly">The desktop session stopped unexpectedly (exit %1$d).</string>
+    <string name="error_desktop_not_started">The desktop did not start (%1$s).</string>
+    <string name="action_start_again">Start again</string>
+    <string name="welcome_toast">Swipe from the top for Omarchy. Access Omdroid settings from the notification.</string>
 
-    <string-array name="scale_entries">
-        <item>0.5x</item>
-        <item>0.75x</item>
-        <item>1.0x (native)</item>
-        <item>1.5x</item>
-    </string-array>
-    <string-array name="scale_values">
-        <item>0.5</item>
-        <item>0.75</item>
-        <item>1.0</item>
-        <item>1.5</item>
-    </string-array>
-
-    <string-array name="orientation_entries">
+    <string-array name="ui_scale_entries">
         <item>Auto</item>
-        <item>Landscape</item>
-        <item>Portrait</item>
+        <item>1x</item>
+        <item>2x</item>
     </string-array>
-    <string-array name="orientation_values">
+    <string-array name="ui_scale_values">
         <item>auto</item>
-        <item>landscape</item>
-        <item>portrait</item>
+        <item>1</item>
+        <item>2</item>
     </string-array>
 
-    <string-array name="de_entries">
-        <item>Phosh</item>
-        <item>XFCE4</item>
-        <item>Sxmo</item>
-        <item>Plasma Mobile</item>
+    <string-array name="refresh_entries">
+        <item>60 Hz</item>
+        <item>90 Hz</item>
+        <item>120 Hz</item>
     </string-array>
-    <string-array name="de_values">
-        <item>phosh</item>
-        <item>xfce4</item>
-        <item>sxmo</item>
-        <item>plasma-mobile</item>
+    <string-array name="refresh_values">
+        <item>60000</item>
+        <item>90000</item>
+        <item>120000</item>
     </string-array>
 </resources>

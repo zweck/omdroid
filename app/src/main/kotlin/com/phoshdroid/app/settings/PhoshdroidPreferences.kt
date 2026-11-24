@@ -23,12 +23,27 @@ class PhoshdroidPreferences(context: Context) {
 
     var desktopEnvironment: DesktopEnvironment
         get() = DesktopEnvironment.entries.find {
-            it.value == prefs.getString("de", "phosh")
-        } ?: DesktopEnvironment.PHOSH
+            it.value == prefs.getString("de", "omarchy")
+        } ?: DesktopEnvironment.OMARCHY
         set(value) = prefs.edit().putString("de", value.value).apply()
 
+    /**
+     * Omarchy's UI scale: `auto` (resolved from the density by
+     * [com.phoshdroid.app.launch.UiScale.resolve]), `1` or `2`. Hyprland needs
+     * an integer scale, so a stored choice keeps meaning itself.
+     */
+    var uiScale: String
+        get() = prefs.getString("ui_scale", com.phoshdroid.app.launch.UiScale.AUTO)
+            ?: com.phoshdroid.app.launch.UiScale.AUTO
+        set(value) = prefs.edit().putString("ui_scale", value).apply()
+
+    /** Panel refresh reported to the guest, in millihertz (Hyprland's unit). */
+    var refreshMhz: Int
+        get() = prefs.getString("refresh_mhz", "120000")?.toIntOrNull() ?: 120_000
+        set(value) = prefs.edit().putString("refresh_mhz", value.toString()).apply()
+
     var bindSdcard: Boolean
-        get() = prefs.getBoolean("bind_sdcard", true)
+        get() = prefs.getBoolean("bind_sdcard", false)
         set(value) = prefs.edit().putBoolean("bind_sdcard", value).apply()
 
     var customStartupScript: String?
@@ -45,7 +60,7 @@ class PhoshdroidPreferences(context: Context) {
             orientation = orientation,
             dpiOverride = dpiOverride,
             desktopEnvironment = desktopEnvironment,
-            customStartupScript = customStartupScript
+            customStartupScript = customStartupScript,
         )
     }
 }

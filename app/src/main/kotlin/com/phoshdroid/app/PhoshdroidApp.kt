@@ -20,10 +20,10 @@ class PhoshdroidApp : Application() {
         val channel =
             NotificationChannel(
                 CHANNEL_ID,
-                "Phoshdroid Service",
+                "Omdroid Service",
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "Shows when the postmarketOS desktop is running"
+                description = "Shows when the Omdroid desktop is running"
             }
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)

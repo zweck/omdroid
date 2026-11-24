@@ -2,6 +2,7 @@ package com.phoshdroid.app.proot
 
 import java.io.File
 
+/** Rootfs location and login entry point for the proot guest. */
 data class ProcessResult(val exitCode: Int, val output: String)
 
 interface ProcessRunner {
@@ -31,21 +32,24 @@ class SystemProcessRunner : ProcessRunner {
 class ProotDistroManager(
     private val commandBuilder: ProotCommandBuilder,
     private val installedRootfsDir: File,
-    private val rootfsTarball: File,
-    private val processRunner: ProcessRunner = SystemProcessRunner()
+    private val distroName: String,
+    private val processRunner: ProcessRunner = SystemProcessRunner(),
 ) {
-
-    private val distroDir = File(installedRootfsDir, "postmarketos")
+    private val distroDir = File(installedRootfsDir, distroName)
 
     fun isInstalled(): Boolean = distroDir.exists() && distroDir.isDirectory
 
     fun login(
         startupScript: String,
-        bindSdcard: Boolean = false
+        bindSdcard: Boolean = false,
+        width: Int,
+        height: Int,
+        scale: Int,
+        refreshMhz: Int,
     ): Process {
         return processRunner.start(
             commandBuilder.buildLoginCommand(startupScript, bindSdcard),
-            commandBuilder.buildEnvironment()
+            commandBuilder.buildEnvironment(width, height, scale, refreshMhz, bindSdcard),
         )
     }
 }

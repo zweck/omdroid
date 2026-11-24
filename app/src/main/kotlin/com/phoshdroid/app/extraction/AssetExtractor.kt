@@ -41,9 +41,22 @@ class AssetExtractor {
                         Runtime.getRuntime().exec(
                             arrayOf("ln", "-sf", entry.linkName, outFile.absolutePath)
                         ).waitFor()
+                    } else if (entry.isLink) {
+                        // Hard link into the archive (terminfo duplicates); the
+                        // entry carries no data, so a plain write would leave an
+                        // empty file.
+                        outFile.parentFile?.mkdirs()
+                        outFile.delete()
+                        val target = File(targetDir, entry.linkName)
+                        try {
+                            Runtime.getRuntime().exec(
+                                arrayOf("ln", "-f", target.absolutePath, outFile.absolutePath)
+                            ).waitFor()
+                        } catch (_: Exception) {
+                        }
                     } else {
                         outFile.parentFile?.mkdirs()
-                        outFile.outputStream().use { out ->
+                        java.io.BufferedOutputStream(outFile.outputStream()).use { out ->
                             tar.copyTo(out)
                         }
                         if (entry.mode and 0b001_001_001 != 0) {

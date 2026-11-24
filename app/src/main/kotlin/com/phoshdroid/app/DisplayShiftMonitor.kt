@@ -13,8 +13,10 @@ import android.util.Log
 
 /**
  * Detects when the device's display dimensions change between Phoshdroid
- * foregrounding events and restarts the process so the new proot session is
- * launched against the current metrics.
+ * foregrounding events. The new size is recorded either way; by default the
+ * session keeps running and follows the X root, and only the restart switch
+ * ([LauncherActivity.RESTART_SESSION_ON_DISPLAY_SHIFT]) brings back the old
+ * kill-and-relaunch behaviour.
  *
  * Why a process-level monitor and not just LauncherActivity:
  *
@@ -128,12 +130,13 @@ class DisplayShiftMonitor(
             return
         }
 
-        // Genuine shift. Persist new dims (commit so the restarted process
-        // reads them on first boot) and kill ourselves; AlarmManager brings
-        // us back in 200 ms.
-        Log.w(
+        // Genuine shift. Record the new size; by default nothing is stopped or
+        // restarted — the guest follows the X root (contract section 3). The old
+        // restart path stays reachable behind the same switch the launcher uses.
+        Log.i(
             "Phoshdroid.Monitor",
-            "[$source] display shift ${lastW}x$lastH@$lastId -> ${currentW}x$currentH@$currentId, restarting",
+            "[$source] display shift ${lastW}x$lastH@$lastId -> ${currentW}x$currentH@$currentId, " +
+                if (LauncherActivity.RESTART_SESSION_ON_DISPLAY_SHIFT) "restarting" else "recording",
         )
         prefs
             .edit()
@@ -142,10 +145,7 @@ class DisplayShiftMonitor(
             .putInt("last_id", currentId)
             .commit()
 
-        // Clear the per-process bootstrap flags so the restarted process
-        // re-runs bootstrap against the new metrics. They live as static
-        // companion fields on LauncherActivity but the process-kill below
-        // resets them anyway; mentioning here for the reader.
+        if (!LauncherActivity.RESTART_SESSION_ON_DISPLAY_SHIFT) return
 
         try {
             // Stop proot cleanly first; saves a stale rootfs lock and gives

@@ -7,14 +7,14 @@ enum class Orientation(val value: String) {
 }
 
 enum class DesktopEnvironment(val value: String) {
-    PHOSH("phosh"), XFCE4("xfce4"), SXMO("sxmo"), PLASMA_MOBILE("plasma-mobile")
+    OMARCHY("omarchy")
 }
 
 data class ProotConfig(
     val scaleFactor: Float = 1.0f,
     val orientation: Orientation = Orientation.AUTO,
     val dpiOverride: Int? = null,
-    val desktopEnvironment: DesktopEnvironment = DesktopEnvironment.PHOSH,
+    val desktopEnvironment: DesktopEnvironment = DesktopEnvironment.OMARCHY,
     val customStartupScript: String? = null
 )
 

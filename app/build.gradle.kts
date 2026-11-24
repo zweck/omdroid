@@ -62,6 +62,39 @@ android {
     }
 }
 
+// The guest scripts travel with the APK (R3 H13). Keep this list identical to the
+// "Applying overlay" block in rootfs/package-omarchy-rootfs.sh: the same five
+// scripts plus fake-proc/, installed into the guest's /etc/phoshdroid/.
+// GuestOverlay.sync then rewrites whatever differs under
+// <prefix>/var/lib/proot-distro/installed-rootfs/omarchy before a session starts,
+// so an APK update reaches an existing install without wiping app data.
+val guestOverlayAssetDir = layout.buildDirectory.dir("generated/guestOverlay/guest-overlay")
+
+val syncGuestOverlay =
+    tasks.register<Sync>("syncGuestOverlay") {
+        from(rootProject.file("rootfs/overlay/etc/phoshdroid")) {
+            include("start.sh", "session-child.sh", "omarchy-plugin-index.sh", "fit-x11.py", "omarchy-watch.py")
+            include("fake-proc/**")
+        }
+        into(guestOverlayAssetDir.map { it.dir("etc/phoshdroid") })
+    }
+
+// The registered dir is an asset ROOT, so it is the generated tree's parent: the
+// APK then carries assets/guest-overlay/etc/phoshdroid/..., the path
+// GuestOverlay.ASSET_ROOT reads. Every task that reads the assets (each variant's
+// merge/package, and lint's report model) must wait for the copy, or Gradle
+// flags an implicit dependency on the task's output.
+val guestOverlayAssetsRoot = layout.buildDirectory.dir("generated/guestOverlay")
+android.sourceSets.getByName("main").assets.srcDir(guestOverlayAssetsRoot.get().asFile.absolutePath)
+
+tasks.matching {
+    (it.name.startsWith("merge") && it.name.endsWith("Assets")) ||
+        (it.name.startsWith("package") && it.name.endsWith("Assets")) ||
+        it.name.contains("lint", ignoreCase = true)
+}.configureEach {
+    dependsOn(syncGuestOverlay)
+}
+
 // guava:24.1-jre (pulled in by termux-shared) and androidx.* both bring ListenableFuture.
 // Replace the standalone artifact with the empty conflict-avoidance stub so guava wins.
 configurations.all {
