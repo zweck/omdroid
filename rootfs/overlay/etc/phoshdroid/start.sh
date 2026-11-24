@@ -1,286 +1,110 @@
 #!/bin/bash
-# Phoshdroid startup — root-side prep, then drops to UID 1000 for the phosh session.
-exec > /tmp/phoshdroid-start.log 2>&1
-# Prefix every traced command with epoch.fractional-seconds + line number so
-# we can pin down which step is slow when phosh-ready takes minutes instead
-# of the expected ~6s. Without this the trace is undated and a 2-minute
-# chown looks identical to a 2-second one.
-export PS4='+ [$(date +%s.%N | cut -c1-14)] L${LINENO}: '
+# Omarchy guest session. Runs as uid 1000 inside proot: no root prep here.
+# Order: cage (nested Wayland parent over Xlorie) -> Hyprland -> Omarchy shell
+# (started by the Hyprland lua config when OMARCHY_PROOT is set).
+#
+# cage/wlroots is the parent because its X11 backend presents through the X
+# Present extension (fd-passing SHM); the weston pixman x11 backend hard-requires
+# SysV SHM, which the Android app sandbox blocks (shmget -> ENOSYS), so it dies
+# with "x11shm: failed to allocate SHM segment".
+exec > /tmp/omarchy-session.log 2>&1
 set -x
 
-# --- root-side prep -------------------------------------------------------
-mkdir -p /tmp /run /var/tmp /dev/shm /usr/lib/gdk-pixbuf-2.0/2.10.0 /home/user
-chmod 1777 /tmp /var/tmp /dev/shm 2>/dev/null
-
-# chown -R user:user /home/user used to run unconditionally on every launch.
-# On a populated profile (~200 MB / 700 files including .mozilla and .cache)
-# this took 2-3 minutes under proot — every chown syscall pays for proot's
-# translator, and the tree only grows as the user installs/uses apps. Gate
-# it behind a marker so it runs once on first boot (or after a deliberate
-# reset by deleting the marker) and is a no-op afterwards. The on-disk uid
-# is stable across launches; proot doesn't rewrite it.
-CHOWN_MARKER=/home/user/.phoshdroid-chowned
-if [ ! -f "$CHOWN_MARKER" ]; then
-    echo "first-boot chown of /home/user (one-time; can take a few minutes on a populated profile)"
-    chown -R user:user /home/user 2>/dev/null || true
-    # Marker itself ends up user-owned by the chown above, but write it
-    # explicitly so a partial chown still leaves a sensible flag.
-    touch "$CHOWN_MARKER" 2>/dev/null || true
-    chown user:user "$CHOWN_MARKER" 2>/dev/null || true
-fi
-
-# Replace bwrap with a shim that strips sandbox flags and just execs the inner
-# command. bwrap's real sandboxing needs CLONE_NEWUSER + seccomp, which proot
-# can't emulate. glycin (used by gdk-pixbuf 2.44 for SVG loading) invokes
-# bwrap on every image load — without this shim, phosh aborts on the first
-# icon. Security is already a no-op under proot; the shim just makes the
-# expected command flow through.
-if [ -f /etc/phoshdroid/bwrap-shim.sh ] && [ -e /usr/bin/bwrap ]; then
-    # Only swap when /usr/bin/bwrap is still the original ELF, not our
-    # shebang-prefixed shim. Avoids copying a multi-MB binary on every launch.
-    if ! head -c2 /usr/bin/bwrap 2>/dev/null | grep -q '#!'; then
-        chmod +x /etc/phoshdroid/bwrap-shim.sh
-        cp /usr/bin/bwrap /usr/bin/bwrap.real 2>/dev/null || true
-        cp /etc/phoshdroid/bwrap-shim.sh /usr/bin/bwrap
-        chmod +x /usr/bin/bwrap
-    fi
-fi
-# Regenerate the gdk-pixbuf loader cache only if a loader .so is newer than
-# the cache, or the cache is missing. Under proot this tool takes several
-# seconds; skipping it on unchanged installs shaves visible time off cold
-# starts.
-pixbuf_dir=/usr/lib/gdk-pixbuf-2.0/2.10.0
-pixbuf_cache="$pixbuf_dir/loaders.cache"
-if [ ! -f "$pixbuf_cache" ] || \
-    [ -n "$(find "$pixbuf_dir/loaders" -name '*.so' -newer "$pixbuf_cache" 2>/dev/null | head -n1)" ]; then
-    gdk-pixbuf-query-loaders > "$pixbuf_cache" 2>/dev/null || true
-fi
-
-# Recompile gschemas so our 99-phoshdroid.gschema.override wins over the
-# pmOS defaults. Only runs when an .xml or .override is newer than
-# gschemas.compiled — which is the case the first time our overlay lands
-# on a fresh rootfs, and not on subsequent launches.
-schemas_dir=/usr/share/glib-2.0/schemas
-schemas_compiled="$schemas_dir/gschemas.compiled"
-if [ ! -f "$schemas_compiled" ] || \
-    [ -n "$(find "$schemas_dir" \( -name '*.xml' -o -name '*.override' \) -newer "$schemas_compiled" 2>/dev/null | head -n1)" ]; then
-    glib-compile-schemas "$schemas_dir" 2>/dev/null || true
-fi
-
-# Clear PAM blockers.
-passwd -d user >/dev/null 2>&1 || true
-passwd -d root >/dev/null 2>&1 || true
-
-# DNS — the rootfs ships with whatever resolv.conf was current when the
-# tarball was built (typically a LAN router IP from the build machine),
-# and there's no NetworkManager inside the proot to refresh it because
-# we have no system bus. Hardcode public resolvers so Firefox / apt /
-# anything else inside phosh can actually resolve hostnames regardless
-# of which Android network is active (Wi-Fi, cellular, VPN). Cloudflare
-# + Google chosen because both work over IPv4 and IPv6 and both honour
-# Android's per-uid VPN routing (so traffic still goes through whatever
-# interface the host has selected).
-cat > /etc/resolv.conf <<RESOLV_EOF
-# Phoshdroid: managed by /etc/phoshdroid/start.sh; edits will be
-# overwritten on next launch. To use a different resolver, edit the
-# heredoc in start.sh.
-nameserver 1.1.1.1
-nameserver 1.0.0.1
-nameserver 8.8.8.8
-nameserver 8.8.4.4
-RESOLV_EOF
-chmod 644 /etc/resolv.conf
-
-# Populate /etc/apk/keys/ from /usr/share/apk/keys/.
-#
-# pmbootstrap-built rootfs ship the Alpine + postmarketOS public keys
-# under /usr/share/apk/keys/{aarch64,armv7,...}/*.rsa.pub but never
-# install them into /etc/apk/keys/, which is the only place apk itself
-# looks. Result: every 'apk' command emits 'UNTRUSTED signature' for
-# every repo and refuses to install any package ('curl (no such
-# package)' even though it's in the index). 'apk add --allow-untrusted'
-# works around it but isn't something we should ask the user to type.
-#
-# Detect the proot's architecture (always aarch64 today; keeping the
-# expansion future-proof) and copy in the matching arch dir plus the
-# postmarketOS build key. Idempotent because cp -n won't overwrite.
-KEYS_SRC=/usr/share/apk/keys
-KEYS_DST=/etc/apk/keys
-mkdir -p "$KEYS_DST"
-ARCH=$(uname -m)
-if [ -d "$KEYS_SRC/$ARCH" ]; then
-    cp -n "$KEYS_SRC/$ARCH"/*.rsa.pub "$KEYS_DST/" 2>/dev/null || true
-fi
-# build.postmarketos.org.rsa.pub lives at the top level, not under the
-# arch subdir, because it signs every arch the pmOS build farm produces.
-cp -n "$KEYS_SRC"/build.postmarketos.org.rsa.pub "$KEYS_DST/" 2>/dev/null || true
-
-# pmroot fake-root listener.
-#
-# start.sh runs as fake-UID-0 (proot's -0 flag), but we drop to UID 1000
-# via `su - user` before exec'ing phosh because GNOME apps refuse to run
-# as root. That leaves the user with no path to apk / passwd / mkfs etc:
-# Android's untrusted_app sandbox sets PR_SET_NO_NEW_PRIVS=1, which
-# blocks sudo/su from elevating, and proot can't fake UID 0 again once
-# we've explicitly setuid'd down.
-#
-# Solution: while we're still UID 0, fork a long-running bash that reads
-# command lines from a FIFO and runs each one as the listener's own
-# (root) UID. The user-side `pmroot` wrapper writes commands in and
-# collects results. Functionally equivalent to a passwordless sudo
-# scoped to commands the user explicitly runs through pmroot.
-#
-# Security model: any process at UID 1000 inside the rootfs can write to
-# the FIFO, which means anything the user can run can become 'root'.
-# That's already the security model of proot — there's no real privilege
-# boundary because it's all simulation — so pmroot doesn't weaken
-# anything that wasn't already permeable.
-mkdir -p /tmp/pmroot
-chmod 1777 /tmp/pmroot
-rm -f /tmp/pmroot/in
-mkfifo /tmp/pmroot/in
-chmod 622 /tmp/pmroot/in
-
-# The listener loop runs forever, reading one command-line per iteration.
-# Backgrounded with disown so it survives the shell that started it; nohup
-# detaches it from the terminal once we drop privs and exec into su.
-# Stdout/stderr go to a debug log so a misbehaving listener can be
-# inspected without a live shell.
-nohup bash -c '
-    exec >>/tmp/pmroot/listener.log 2>&1
-    echo "=== pmroot listener started at $(date) ==="
-    while true; do
-        # Re-open the FIFO every iteration. The writer side closes after
-        # each command, which would make read() return EOF; the loop
-        # would spin instead of blocking.
-        if ! IFS= read -r line < /tmp/pmroot/in; then
-            sleep 0.1
-            continue
-        fi
-        # Split on first colon: <id>:<quoted-command>
-        id="${line%%:*}"
-        cmd="${line#*:}"
-        out="/tmp/pmroot/out.$id"
-        done_marker="/tmp/pmroot/done.$id"
-        echo "[$(date +%T)] running $id: $cmd"
-        # Run via bash -c so printf %q quoting from the wrapper survives.
-        # Do NOT append `|| true` here — that masks the real exit code
-        # because $? then reflects the true builtin, not the command. We
-        # rely on the outer loop being robust against non-zero rc so the
-        # listener stays alive without that suppression.
-        # (Keep comments apostrophe-free because the whole listener body
-        #  lives inside a single-quoted nohup bash dash-c block, and a
-        #  stray apostrophe terminates the surrounding quote.)
-        bash -c "$cmd" >"$out" 2>&1
-        rc=$?
-        # If the command touched apk, it may have reinstalled bwrap and
-        # clobbered our shim. Glycin then calls a real bwrap on its next
-        # icon load, which SIGABRTs under proot and tears down phoc —
-        # exactly the symptom seen after the first apk upgrade. Restore
-        # the shim opportunistically; cheap if bwrap is already the shim,
-        # essential if apk just overwrote it.
-        case "$cmd" in
-            *apk*)
-                if [ -f /etc/phoshdroid/bwrap-shim.sh ] && [ -e /usr/bin/bwrap ]; then
-                    if ! head -c2 /usr/bin/bwrap 2>/dev/null | grep -q "#!"; then
-                        cp /usr/bin/bwrap /usr/bin/bwrap.real 2>/dev/null || true
-                        cp /etc/phoshdroid/bwrap-shim.sh /usr/bin/bwrap
-                        chmod +x /usr/bin/bwrap
-                        echo "[$(date +%T)] restored bwrap shim after apk"
-                    fi
-                fi
-                ;;
-        esac
-        echo "$rc" >"$done_marker"
-        echo "[$(date +%T)] done $id rc=$rc"
-    done
-' >/dev/null 2>&1 &
-disown
-echo "pmroot listener pid: $!"
-
-# Phoc config — mode driven by XLORIE_WIDTH/HEIGHT from the Android launcher.
-# If the launcher couldn't determine the display size early enough (e.g. the
-# activity came up while Android was still in Doze), fall back to a sane
-# 9:16-ish default rather than letting phoc inherit wlroots' 1024x768. A
-# wrong-but-plausible mode is dramatically less broken than the default.
-OUTPUT_MODE=""
-if [ -n "$XLORIE_WIDTH" ] && [ -n "$XLORIE_HEIGHT" ] && [ "$XLORIE_WIDTH" -gt 0 ] && [ "$XLORIE_HEIGHT" -gt 0 ]; then
-    OUTPUT_MODE="mode=${XLORIE_WIDTH}x${XLORIE_HEIGHT}"
-else
-    echo "WARN: XLORIE_WIDTH/HEIGHT empty (got '$XLORIE_WIDTH'x'$XLORIE_HEIGHT'); falling back to 1080x2364" >&2
-    OUTPUT_MODE="mode=1080x2004"
-fi
-PHOC_INI="/tmp/phoc.ini"
-cat > "$PHOC_INI" <<PHOC_EOF
-[core]
-xwayland=false
-
-[output:X11-1]
-scale=2
-$OUTPUT_MODE
-PHOC_EOF
-chmod 644 "$PHOC_INI"
-
-# Write the user-session script. This runs under UID 1000 via su, with its own
-# clean env. Keeping this as a separate file avoids heredoc-quoting hell.
-USER_SCRIPT="/tmp/phoshdroid-user.sh"
-cat > "$USER_SCRIPT" <<'USER_EOF'
-#!/bin/bash
-set -x
-
-export TMPDIR=/tmp
-export HOME=/home/user
-export DISPLAY=:0
-
-# Wayland compositor env — phoc drives an X11 backend against our embedded
-# Termux:X11 server and exports a Wayland socket for phosh/apps to use.
-export XDG_RUNTIME_DIR=/tmp
+export HOME=/home/omarchy
+export USER=omarchy
+export LOGNAME=omarchy
+export XDG_RUNTIME_DIR=/run/user/1000
 export XDG_SESSION_TYPE=wayland
-export XDG_CURRENT_DESKTOP=Phosh:GNOME
-export WAYLAND_DISPLAY=wayland-0
+export XDG_CURRENT_DESKTOP=Hyprland
+export XDG_SESSION_DESKTOP=Hyprland
+export WAYLAND_DISPLAY=wayland-omarchy
+export OMARCHY_PATH=/usr/share/omarchy
+export OMARCHY_PROOT=1
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+# Geometry arrives from the host as OMARCHY_OUTPUT_*; the Xlorie variables are
+# the fallback for a manual launch from a shell.
+: "${OMARCHY_OUTPUT_WIDTH:=${XLORIE_WIDTH:-1080}}"
+: "${OMARCHY_OUTPUT_HEIGHT:=${XLORIE_HEIGHT:-2004}}"
+: "${OMARCHY_REFRESH_MHZ:=120000}"
+: "${OMARCHY_SCALE:=2}"
+export OMARCHY_OUTPUT_WIDTH OMARCHY_OUTPUT_HEIGHT OMARCHY_REFRESH_MHZ OMARCHY_SCALE
+
+# The /opt builds are the Android-patched ones (KGSL buffer path); the /usr
+# copies are stock Arch builds and must never come first.
+export PATH=/opt/omarchy-android/hyprland/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export XDG_DATA_DIRS=/opt/omarchy-android/hyprland/share:/usr/local/share:/usr/share
+export LD_LIBRARY_PATH=/opt/omarchy-android/mesa/root/usr/lib:/opt/omarchy-android/aquamarine/lib
+
+# GPU path: the patched Mesa/Hyprland/aquamarine builds talk KGSL directly.
+# ProotCommandBuilder already passes this block from the host; it is repeated
+# here so the script is self-contained for a manual launch from a shell, where
+# Mesa would otherwise pick its X11 DRI3/Zink path (no DRM node inside proot).
+export OMARCHY_GPU_MODE=kgsl
+export MESA_LOADER_DRIVER_OVERRIDE=kgsl
+export LIBGL_DRIVERS_PATH=/opt/omarchy-android/mesa/root/usr/lib/dri
+export VK_ICD_FILENAMES=/opt/omarchy-android/mesa/freedreno_icd.json
+export FD_KGSL_ENABLE_DMABUF=1
+export AQ_NO_KMS_REQUIREMENT=1 AQ_NO_MODIFIERS=1
+export AQ_WAYLAND_REFRESH_MHZ="$OMARCHY_REFRESH_MHZ"
+export HYPRLAND_ANDROID_DMABUF=1 HYPRLAND_SHM_DAMAGE=1
+export HYPRLAND_EGL_NO_MODIFIERS=1 HYPRLAND_EGL_SURFACELESS=1
+export HYPRLAND_NO_SD_NOTIFY=1 HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_RT=1
+export QT_QPA_PLATFORM=wayland GDK_BACKEND=wayland SDL_VIDEODRIVER=wayland
+export XWAYLAND_NO_GLAMOR=1 NO_AT_BRIDGE=1 QT_ACCESSIBILITY=0 GTK_A11Y=none
+
+mkdir -p /run/user/1000
+rm -f /run/user/1000/wayland-omarchy /run/user/1000/wayland-omarchy.lock
+
+# Build the shell plugin index for this session. In proot mode Quickshell reads
+# this file instead of scanning, and upstream writes it only when uname -r
+# reports PRoot, which proot-distro does not. Without it the shell loads with
+# zero plugins: an empty bar and no wallpaper.
+bash /etc/phoshdroid/omarchy-plugin-index.sh
+
+# cage: one fullscreen kiosk surface on the Xlorie root; pixman renderer because
+# an Android app has no DRM/GBM node, x11 backend because that is what the host
+# display server speaks.
+export DISPLAY=:0
 export WLR_BACKENDS=x11
 export WLR_RENDERER=pixman
-export GIO_USE_VFS=local
-export GSK_RENDERER=cairo
-export LIBGL_ALWAYS_SOFTWARE=1
 
-# Firefox content-process sandbox uses syscalls proot can't emulate — tabs
-# SIGSEGV without these.
-export MOZ_DISABLE_CONTENT_SANDBOX=1
-export MOZ_DISABLE_RDD_SANDBOX=1
-export MOZ_DISABLE_GMP_SANDBOX=1
-export MOZ_DISABLE_SOCKET_PROCESS=1
+# Debug switch: /etc/phoshdroid/trace turns on Hyprland/aquamarine tracing.
+if [ -e /etc/phoshdroid/trace ]; then
+    export HYPRLAND_TRACE=1 AQ_TRACE=1
+fi
 
-# Glycin image loader — disable bwrap sandbox (doesn't work in proot).
-export GLYCIN_FORCE_NO_SANDBOX=1
-export GLYCIN_SANDBOX_MECHANISM=none
+# Xlorie has no window manager, so the cage x11 window would stay at the wlroots
+# default of 1024x768 in the corner of the screen. This poller resizes it to
+# the X root (each side rounded down to even) and follows later root size
+# changes; wlroots turns the resize into the new output mode. 0.25 s so a live
+# size change reaches cage quickly.
+python3 /etc/phoshdroid/fit-x11.py "$DISPLAY" 0.25 > /tmp/fit-x11.log 2>&1 &
 
-# ProotCommandBuilder sets a fake DBUS_SESSION_BUS_ADDRESS pointing nowhere;
-# drop it so dbus-run-session creates a fresh bus.
-unset DBUS_SESSION_BUS_ADDRESS
+# A marker left behind by the previous session would hand the host over early.
+rm -f "$XDG_RUNTIME_DIR/omarchy-ready"
 
-exec dbus-run-session -- sh -c '
-    # Let a bare swipe-up dismiss the lockscreen without a PIN.
-    gsettings set sm.puri.phosh.lockscreen require-unlock false 2>&1 | head -3
-    exec phoc -C /tmp/phoc.ini -E /usr/libexec/phosh
-'
-USER_EOF
-chmod 755 "$USER_SCRIPT"
+# Ready marker + layer-fit watcher: writes the marker once the desktop is really
+# drawn, then keeps the shell layers in step with the monitor after a live root
+# size change. Logs to /tmp/omarchy-watch.log.
+python3 /etc/phoshdroid/omarchy-watch.py > /tmp/omarchy-watch.log 2>&1 &
 
-# XLORIE_WIDTH/HEIGHT are set by the Android launcher but don't cross the
-# su -l boundary; write them into a sourced file that the user script reads.
-cat > /tmp/phoshdroid-xlorie.env <<ENV_EOF
-export XLORIE_WIDTH=${XLORIE_WIDTH}
-export XLORIE_HEIGHT=${XLORIE_HEIGHT}
-ENV_EOF
-# Prepend the XLORIE env to the user script so it's available when phoc
-# writes phoc.ini... wait, phoc.ini is already written above as root. But
-# keep XLORIE sourced too in case anything downstream looks at it.
-chmod 644 /tmp/phoshdroid-xlorie.env
+# monitors.lua forces a mode when these hints are set, but they are predictions
+# from before the surface existed; the X root is the truth and Hyprland follows
+# its parent (cage) on its own. Worse, a forced mode is re-applied by a config
+# reload long after the root changed, which leaves the monitor larger than cage.
+# So the hints do not reach Hyprland (nothing else in the guest reads them).
+unset OMARCHY_OUTPUT_WIDTH OMARCHY_OUTPUT_HEIGHT
 
-# --- drop to UID 1000 for phosh + apps ----------------------------------
-# Nautilus and other GNOME apps hardcode `geteuid() == 0` as "unsupported" and
-# exit 95; xdg-desktop-portal rejects /proc/PID/root from root processes.
-# Running the phosh session as 'user' (UID 1000) keeps everything non-root.
-echo "=== handing off to user session ==="
-exec su - user -s /bin/bash -c "source /tmp/phoshdroid-xlorie.env && exec $USER_SCRIPT"
+# session-child.sh needs the real X display name; pass it in a variable of our
+# own so a stray DISPLAY in the child environment cannot point the one-shot
+# resize at a display that does not exist (that cost a 60 s boot once).
+export PHOSHDROID_XDISPLAY="$DISPLAY"
+
+# No systemd under proot: Hyprland is executed directly, and its own config
+# starts the shell once (flock-guarded) when OMARCHY_PROOT is set. The cage client
+# is a tiny wrapper that waits for the resize above before starting Hyprland.
+exec dbus-run-session \
+    --config-file=/home/omarchy/.config/omarchy/proot-session-bus.conf \
+    bash --noprofile --norc -lc \
+    'exec cage -- /etc/phoshdroid/session-child.sh'

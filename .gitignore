@@ -10,12 +10,15 @@ local.properties
 # Android
 app/src/main/assets/rootfs.tar.zst
 app/src/main/assets/bootstrap.tar.zst
-# Build outputs — reproduced by rootfs/package-rootfs.sh + ndk build; far too
-# large for git (~700MB combined). Use ./rootfs/package-rootfs.sh to regenerate.
-app/src/main/assets/rootfs.bin
-app/src/main/assets/bootstrap.bin
+# Build outputs — reproduced by rootfs/package-*.sh + ndk build; far too
+# large for git (~2 GB combined). Use those scripts to regenerate.
+app/src/main/assets/*.bin
 app/src/main/assets/rootfs.tar
 app/src/main/assets/bootstrap.tar
+rootfs/__pycache__/
 
 # OS
 .DS_Store
+
+# Kotlin compiler session files
+.kotlin/
