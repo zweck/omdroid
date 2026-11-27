@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test
 
 class ProotCommandBuilderTest {
 
-    private fun builder() = ProotCommandBuilder(nativeLibDir = "/native", prefixDir = "/prefix", distroName = "omarchy")
+    private fun builder() = ProotCommandBuilder(nativeLibDir = "/native", prefixDir = "/prefix", distroName = "omarchy", androidSessionId = "12345678-1234-1234-1234-123456789abc")
 
     @Test
     fun `exports the output hint when both dimensions are positive`() {
@@ -58,6 +58,7 @@ class ProotCommandBuilderTest {
             "TERM" to "xterm-256color",
             "OMARCHY_PATH" to "/usr/share/omarchy",
             "OMARCHY_PROOT" to "1",
+            "OMDROID_ANDROID_SESSION" to "12345678-1234-1234-1234-123456789abc",
             "OMARCHY_GPU_MODE" to "kgsl",
             "OMARCHY_SCALE" to "2",
             "OMARCHY_REFRESH_MHZ" to "120000",
@@ -163,5 +164,13 @@ class ProotCommandBuilderTest {
 
         assertEquals("kgsl", env["OMDROID_GPU"])
         assertEquals("setting", env["OMDROID_GPU_SOURCE"])
+    }
+    @Test
+    fun `only the current service session matches its guest environment`() {
+        val first = ProotCommandBuilder("/native", "/prefix", "omarchy")
+        val second = ProotCommandBuilder("/native", "/prefix", "omarchy")
+        val env = first.buildEnvironment(0, 0, 2, 60_000)
+        assertEquals(first.androidSessionId, env["OMDROID_ANDROID_SESSION"])
+        org.junit.jupiter.api.Assertions.assertNotEquals(second.androidSessionId, first.androidSessionId)
     }
 }

@@ -2,6 +2,7 @@ package com.phoshdroid.app.proot
 
 import com.phoshdroid.app.launch.GpuMode
 import com.phoshdroid.app.launch.GpuModeRule
+import java.util.UUID
 
 /**
  * Builds the proot command for the Omarchy guest.
@@ -16,6 +17,7 @@ class ProotCommandBuilder(
     private val nativeLibDir: String,
     private val prefixDir: String,
     private val distroName: String,
+    val androidSessionId: String = UUID.randomUUID().toString(),
 ) {
     private val prootPath = "$nativeLibDir/libproot.so"
     private val rootfsDir get() = "$prefixDir/var/lib/proot-distro/installed-rootfs/$distroName"
@@ -146,6 +148,7 @@ class ProotCommandBuilder(
                 "TERM" to "xterm-256color",
                 "OMARCHY_PATH" to "/usr/share/omarchy",
                 "OMARCHY_PROOT" to "1",
+                "OMDROID_ANDROID_SESSION" to androidSessionId,
                 "OMARCHY_SCALE" to scale.toString(),
                 "OMARCHY_REFRESH_MHZ" to refreshMhz.toString(),
                 "PATH" to "$hyprlandStage/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",

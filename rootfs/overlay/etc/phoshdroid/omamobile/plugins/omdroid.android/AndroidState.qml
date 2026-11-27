@@ -8,8 +8,8 @@ Item {
   id: root
   readonly property bool hosted: Quickshell.env("OMARCHY_PROOT") === "1"
   property var snapshot: ({})
-  property double now: Date.now()
-  readonly property bool available: hosted && Model.fresh(snapshot, now)
+  readonly property string sessionId: Quickshell.env("OMDROID_ANDROID_SESSION")
+  readonly property bool available: hosted && Model.fresh(snapshot, sessionId)
   // The bundled shell predates Commons.Translations; keep labels Qt-translatable.
   function t(key) {
     switch (key) {
@@ -32,13 +32,7 @@ Item {
     path: root.hosted ? "/tmp/omdroid-android/state.json" : ""
     watchChanges: root.hosted
     onFileChanged: reload()
-    onLoaded: { root.now = Date.now(); root.snapshot = Model.parse(text()) }
+    onLoaded: root.snapshot = Model.parse(text())
     onLoadFailed: root.snapshot = ({})
-  }
-  Timer {
-    interval: 3000
-    repeat: true
-    running: root.hosted
-    onTriggered: { root.now = Date.now(); data.reload() }
   }
 }

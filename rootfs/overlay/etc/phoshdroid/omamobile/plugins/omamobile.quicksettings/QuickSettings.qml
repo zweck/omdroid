@@ -238,7 +238,7 @@ Item {
       var id = TilesModel.CATALOG[i].id
       var b = backends[id]
       out.push({ id: id, shown: TilesModel.indexOf(layout, id) >= 0, available: !!b && b.available,
-                 enabled: !!b && b.enabled, status: b ? b.status : "" })
+                 enabled: b && b.available ? b.enabled : null, status: b ? b.status : "" })
     }
     return JSON.stringify(out)
   }
@@ -457,7 +457,7 @@ Item {
 
   Process {
     id: probeProc
-    command: ["sh", root.scriptPath("tile-state.sh")]
+    command: ["sh", root.scriptPath("tile-state.sh"), android.hosted ? "--android" : "--linux"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -484,9 +484,9 @@ Item {
   // back on needs a reboot today.
   QtObject {
     id: airplane
-    readonly property bool available: android.hosted || root.probedHas("airplane")
+    readonly property bool available: android.hosted ? android.value("airplaneMode") !== undefined : root.probedHas("airplane")
     readonly property bool enabled: android.hosted ? android.value("airplaneMode") === true : available && root.probedOn("airplane", "airplane")
-    readonly property string icon: enabled ? "󰀝" : "󰀞"
+    readonly property string icon: android.hosted && !available ? "󰋗" : enabled ? "󰀝" : "󰀞"
     readonly property string status: android.hosted ? android.status("airplaneMode") : !available ? "No radios" : enabled ? "On" : "Off"
     function toggle() { if (android.hosted) root.openAndroid("airplane"); else if (available) root.runTileAction("airplane", !enabled) }
   }
@@ -506,10 +506,10 @@ Item {
   // Battery saver: power-profiles-daemon's power-saver profile.
   QtObject {
     id: batterySaver
-    readonly property bool available: android.hosted || root.probedHas("powerprofile")
+    readonly property bool available: android.hosted ? android.value("powerSave") !== undefined : root.probedHas("powerprofile")
     readonly property bool enabled: android.hosted ? android.value("powerSave") === true : available && (root.optimistic["battery-saver"] !== undefined
       ? root.optimistic["battery-saver"] : root.probed.powerprofile === "power-saver")
-    readonly property string icon: enabled ? "󰂃" : "󰁹"
+    readonly property string icon: android.hosted && !available ? "󰋗" : enabled ? "󰂃" : "󰁹"
     readonly property string status: android.hosted ? android.status("powerSave") : !available ? "No power profiles"
       : root.optimistic["battery-saver"] !== undefined ? (enabled ? "On" : "Off")
       : TilesModel.powerStatus(root.probed.powerprofile)
@@ -705,9 +705,9 @@ Item {
         if (networks[i] && networks[i].connected) return networks[i]
       return null
     }
-    readonly property bool available: android.hosted || (backendAvailable && !!device && Networking.wifiHardwareEnabled !== false)
+    readonly property bool available: android.hosted ? android.value("wifiEnabled") !== undefined : (backendAvailable && !!device && Networking.wifiHardwareEnabled !== false)
     readonly property bool enabled: android.hosted ? android.value("wifiEnabled") === true : available && Networking.wifiEnabled
-    readonly property string icon: enabled ? "󰤨" : "󰤭"
+    readonly property string icon: android.hosted && !available ? "󰋗" : enabled ? "󰤨" : "󰤭"
     readonly property bool details: true
     function openDetails() { root.openWifiPanel() }
     readonly property string status: {
@@ -744,7 +744,7 @@ Item {
 
   // One page at a time.
   function openPage(page) {
-    if (android.hosted && (page === "wifi" || page === "bluetooth")) { android.open(page); return }
+    if (android.hosted && (page === "wifi" || page === "bluetooth")) { root.openAndroid(page); return }
     if (page !== "wifi") wifiPicker.close()
     if (page !== "bluetooth") bluetoothPanelItem.close()
     if (page !== "record") recordPanelItem.close()
@@ -778,11 +778,11 @@ Item {
     id: bluetooth
 
     readonly property var adapter: Bluetooth.defaultAdapter
-    readonly property bool available: android.hosted || !!adapter
+    readonly property bool available: android.hosted ? android.value("bluetoothEnabled") !== undefined : !!adapter
     readonly property bool enabled: android.hosted ? android.value("bluetoothEnabled") === true : available && adapter.enabled
     property bool pending: false
     readonly property bool busy: pending
-    readonly property string icon: enabled ? (connected ? "󰂱" : "󰂯") : "󰂲"
+    readonly property string icon: android.hosted && !available ? "󰋗" : enabled ? (connected ? "󰂱" : "󰂯") : "󰂲"
     readonly property bool details: true
     function openDetails() { root.openBluetoothPanel() }
     readonly property var connected: {

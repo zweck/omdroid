@@ -200,15 +200,24 @@ sys.exit(0 if isinstance(s, dict) and s.get("available") and not s.get("running"
     fi
 }
 
-p_airplane > "$dir/10-airplane" &
-p_hotspot > "$dir/20-hotspot" &
-p_powerprofile > "$dir/30-powerprofile" &
+# Android owns these devices; do not spawn Linux hardware/systemd probes.
+if [ "${1:-}" = "--android" ]; then
+    echo 'airplane=none' > "$dir/10-airplane"
+    echo 'hotspot=none' > "$dir/20-hotspot"
+    echo 'powerprofile=none' > "$dir/30-powerprofile"
+    echo 'dictation=none' > "$dir/80-dictation"
+    echo 'data=none' > "$dir/90-data"
+else
+    p_airplane > "$dir/10-airplane" &
+    p_hotspot > "$dir/20-hotspot" &
+    p_powerprofile > "$dir/30-powerprofile" &
+    p_dictation > "$dir/80-dictation" &
+    p_data > "$dir/90-data" &
+fi
 p_theme > "$dir/40-theme" &
 p_nightlight > "$dir/50-nightlight" &
 p_stayawake > "$dir/60-stayawake" &
 p_record > "$dir/70-record" &
-p_dictation > "$dir/80-dictation" &
-p_data > "$dir/90-data" &
 wait
 
 cat "$dir/10-airplane" "$dir/20-hotspot" "$dir/30-powerprofile" "$dir/40-theme" \

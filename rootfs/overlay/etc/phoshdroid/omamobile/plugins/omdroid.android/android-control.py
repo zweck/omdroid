@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """Request a fixed host control through the app-private mailbox."""
 import os
 from pathlib import Path
@@ -15,9 +16,16 @@ def main():
     if not directory.is_dir():
         return 1
     temporary = directory / (uuid.uuid4().hex + ".new")
-    with temporary.open("x") as stream:
-        stream.write(sys.argv[1] + "\n")
-    os.replace(temporary, temporary.with_suffix(".request"))
+    try:
+        with temporary.open("x") as stream:
+            stream.write(sys.argv[1] + "\n")
+        os.replace(temporary, temporary.with_suffix(".request"))
+    except OSError:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return 3
     return 0
 
 

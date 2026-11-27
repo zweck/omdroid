@@ -1,47 +1,5 @@
 # Launch and geometry contract (host app <-> guest session)
 
-## Android settings bridge
-
-Android owns Wi-Fi, Bluetooth, the display, and the battery. A proot guest has no
-NetworkManager, BlueZ adapter, UPower battery, or physical backlight to control.
-While a session runs, `ProotService` starts `AndroidControls`, which atomically
-publishes `<prefix>/tmp/omdroid-android/state.json` every two seconds. The guest
-sees the same file at `/tmp/omdroid-android/state.json` through its existing tmp
-bind. Version 1 contains a millisecond Unix `timestamp`, boolean radio/power
-states, and a numeric battery percentage. Failed
-reads are null. No network names, addresses, or paired-device lists are exported.
-
-The shared `omdroid.android/AndroidState.qml` validates the schema and field
-types and expires snapshots after ten seconds. The mobile bar and quick settings
-use it only with `OMARCHY_PROOT=1`; other environments keep their Linux backends.
-`omdroid-ui.sh` links this shared module alongside the five mobile plugins.
-
-Taps run `android-control.py`, which atomically renames a unique request into
-`/tmp/omdroid-android/requests/*.request`. The host accepts only `wifi`,
-`bluetooth`, `display`, `rotation-lock`, `rotation-auto`, `volume`, `airplane`,
-`battery`, and `settings`. Rotation requests directly change the embedded
-display's persisted `forceOrientation` preference: lock captures its current
-portrait/landscape orientation, including reverse orientations, and auto resumes
-following Android's device rotation policy. The tile stays open, waits for the
-reported state, and sends an explicit direction so duplicate requests cannot
-undo a lock. Its `rotationLocked` field describes this app-specific lock, not
-Android's global rotation setting. No system setting or permission is changed.
-Other requests open the corresponding Android Settings activity so Android
-handles device selection, pairing, and changes. This interface accepts no arbitrary intent,
-command, argument, or URL. Requests are limited to 32 bytes, expire after 30
-seconds, are consumed once, and are cleared at session start. Symlinks are ignored.
-
-Only the normal `ACCESS_NETWORK_STATE` and `ACCESS_WIFI_STATE` permissions are
-added. The bridge needs no secure-settings grant, location permission, nearby
-device permission, root, or accessibility service. Android/OEM restrictions on a
-read leave that field unknown; a missing settings activity reports an error.
-Stopping the session stops the worker and removes its status file.
-
-The extra-keyboard preferences button opens the enabled, non-exported
-`com.termux.x11.LoriePreferences` activity. It has no launcher intent filter.
-Disabling this activity makes the embedded keyboard's explicit launch throw
-`ActivityNotFoundException`, terminating the app and its in-process Linux session.
-
 Two agents work against this file in round 2: one owns the host (`app/**`, Kotlin), one owns the
 guest (`rootfs/overlay/etc/phoshdroid/**`). Neither edits this file. If something here is
 wrong or cannot be met, say so at the top of your report with the evidence and work to the
@@ -157,32 +115,6 @@ not work under proot) and `su`/`run0`/`pkexec` cannot help, but 70 of Omarchy's 
 - **What it is**: fake root only. Everything still runs as the Android app's own uid inside its
   private storage, so `sudo` grants no privilege it did not already have. `systemctl` still does
   not work (there is no systemd in this guest).
-
-## Guest time zone and dialog utilities
-
-Before starting the broker or desktop, `ProotService` synchronizes the guest's
-`/etc/localtime` with Android's named time zone through `GuestTimezone`. The
-relative symlink points into the guest's installed tzdata, so the clock, calendar
-and applications share local time and daylight-saving rules. Missing or invalid
-zone data preserves the previous configuration. A host time-zone change is
-applied when the next guest session starts; the guest does not run a time daemon.
-
-`/etc/phoshdroid/guiutils/bin` is on the session PATH. These actual Hyprland GUI
-utilities use the upstream Qt implementation, built against the pinned image's
-libraries with software rendering. The newer hyprtoolkit implementation requires
-dmabuf v4 and DRM render nodes that this guest cannot provide. This avoids a partial
-system upgrade. Both the rootfs packager and APK overlay carry them, so updated
-installations receive the same runtime dependency as fresh installations.
-See `rootfs/build-guiutils.sh` and the accompanying provenance and license.
-
-The overlay also carries the standard `xdg-terminal-exec` script, used only if
-the guest has no existing terminal execution helper. `omdroid-app-defaults.py`
-selects installed Nano when the image lacks Neovim and no editor choice exists.
-It migrates only the exact stock Chromium flags file to native Wayland with
-software rendering, saving an exclusive `.before-omdroid-wayland` backup first.
-Customized flags, browser profiles and existing editor choices are preserved.
-Software browser rendering trades acceleration for compatibility with this
-nested compositor; it does not change the guest compositor's GPU configuration.
 
 ## 8. Docking (monitor, keyboard, mouse)
 
@@ -460,3 +392,102 @@ shell (`act: shell restart FAILED (...): not retrying`), which writes
 the retry budget (3 actions per size, then `giving up`). Log lines: guest `ui-scale <a> -> <b>`,
 `monitor scale <s> != ui-scale <w>: monitor fit ... scale <w>`; host `dock: ui-scale <n> written
 display=<id> <w>x<h>@<dpi>` and `launch: ui-scale <n> written|kept`.
+
+## 13. Android settings bridge
+
+Android owns Wi-Fi, Bluetooth, the display and battery. While a guest session runs,
+`ProotService` owns `AndroidControls`. Broadcast receivers (battery, Wi-Fi, power,
+airplane mode), a Wi-Fi `NetworkCallback`, settings `ContentObserver`s and the
+embedded display preference listener trigger snapshots. Resuming the embedded
+activity refreshes its preference listener and state after initial handover or
+a dock change. Callbacks coalesce for
+50 ms; the host writes only when field values change. There is no polling loop.
+
+The guest reads `/tmp/omdroid-android/state.json`, bound from the host prefix tmp.
+Schema 2 has these fields; radio/power fields are nullable when the OS denies or
+cannot supply a reading. No network names, addresses or paired-device lists appear.
+
+| Field | Type | Meaning / units |
+| --- | --- | --- |
+| `schema` | integer | `2` |
+| `sessionId` | string | Random UUID for this service/guest lifetime |
+| `timestamp` | number | Unix milliseconds of the last changed snapshot; not a heartbeat |
+| `wifiEnabled` | boolean or null | Android Wi-Fi radio enabled |
+| `wifiConnected` | boolean or null | At least one Wi-Fi network reported by the callback |
+| `bluetoothEnabled` | boolean or null | Android Bluetooth radio state |
+| `airplaneMode` | boolean or null | Android airplane mode |
+| `rotationLocked` | boolean or null | Omdroid activity orientation locked |
+| `powerSave` | boolean or null | Android battery saver |
+| `batteryPercent` | integer or null | Battery charge, 0–100 percent |
+| `charging` | boolean or null | Android reports an external power connection |
+| `full` | boolean or null | Android battery status is full |
+
+**Liveness:** the host passes `OMDROID_ANDROID_SESSION` to the guest. A snapshot
+is usable only when its validated session ID matches that environment value.
+The file is watched, never periodically reloaded. An unchanged reading stays
+valid in the same session; stopping unregisters listeners and removes the file.
+The X server is in the Android host process, so a host crash also removes the
+live display. A new service/guest gets a new ID and rejects any previous file.
+This deliberately replaces the old ten-second timestamp lease: it is session
+liveness, not a watchdog for a hung Android main thread. Old schema-1 snapshots
+are rejected. APK overlay and host updates must ship together.
+
+Taps atomically publish `requests/*.request`. A `FileObserver` wakes a streaming
+consumer: at most 64 directory entries per batch, at least 100 ms between batches
+under load, at most one accepted action per 500 ms. Surplus requests are discarded,
+not queued for later launches. Each read is bounded to 33 bytes; accepted content
+is at most 32 bytes and at most 30 seconds old, and predates neither this session
+nor the current wall clock. Empty request directories are removed; nonempty
+invalid directories are renamed out of the request namespace without traversing
+guest-controlled trees. Incomplete `.new` writes are ignored; the writer removes
+its own temporary file on failure.
+
+State and request operations use `SecureDirectoryStream` handles opened with
+no-follow semantics, including the bridge and requests directories. The state
+temporary is exclusively created then atomically renamed. Renaming a shared
+directory or planting a symlink cannot redirect file access into host-private
+files. Unsupported secure-directory access fails closed. Shutdown does not join
+the worker on the main thread; repeated publish failures log only once until a
+successful write.
+
+Accepted actions: `wifi`, `bluetooth`, `display`, `rotation-lock`, `rotation-auto`,
+`volume`, `airplane`, `battery`, `settings`. No arbitrary intent, URL, arguments
+or commands are accepted. Settings use `DisplayLaunch` on the embedded activity's
+current display (the launcher's session display is the fallback), with its normal
+platform-refusal fallback. Radio subpages dismiss the sheet before opening.
+Rotation changes Omdroid's persisted activity orientation inside the sheet, with
+no change to global Android rotation. Unknown tiles use a neutral glyph,
+`available: false`, and IPC `enabled: null`. Outside proot, Linux backends remain.
+The Android probe path skips Linux radio, power-profile, modem and systemd probes;
+software theme, idle-indicator, night-light and recorder checks remain available.
+
+Only normal `ACCESS_NETWORK_STATE` and `ACCESS_WIFI_STATE` permissions are needed;
+no secure-settings, location, nearby-device or accessibility grant is added.
+The extra-key preferences activity is enabled and non-exported, with separate
+Omdroid/Termux preference resource names to avoid Android navigation crashes.
+
+## 14. Guest time zone and dialog utilities
+
+Before starting the broker or desktop, `ProotService` synchronizes the guest's
+`/etc/localtime` with Android's named time zone through `GuestTimezone`. The
+relative symlink points into the guest's installed tzdata, so the clock, calendar
+and applications share local time and daylight-saving rules. Missing or invalid
+zone data preserves the previous configuration. A host time-zone change is
+applied when the next guest session starts; the guest does not run a time daemon.
+
+`/etc/phoshdroid/guiutils/bin` is on the session PATH. These actual Hyprland GUI
+utilities use the upstream Qt implementation, built against the pinned image's
+libraries with software rendering. The newer hyprtoolkit implementation requires
+dmabuf v4 and DRM render nodes that this guest cannot provide. This avoids a partial
+system upgrade. Both the rootfs packager and APK overlay carry them, so updated
+installations receive the same runtime dependency as fresh installations.
+See `rootfs/build-guiutils.sh` and the accompanying provenance and license.
+
+The overlay also carries the standard `xdg-terminal-exec` script, used only if
+the guest has no existing terminal execution helper. `omdroid-app-defaults.py`
+selects installed Nano when the image lacks Neovim and no editor choice exists.
+It migrates only the exact stock Chromium flags file to native Wayland with
+software rendering, saving an exclusive `.before-omdroid-wayland` backup first.
+Customized flags, browser profiles and existing editor choices are preserved.
+Software browser rendering trades acceleration for compatibility with this
+nested compositor; it does not change the guest compositor's GPU configuration.

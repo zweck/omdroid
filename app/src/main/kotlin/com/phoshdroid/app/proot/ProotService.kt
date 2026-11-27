@@ -61,6 +61,7 @@ class ProotService : Service() {
     // Set when Android's child-process limit is on and this app cannot lift it: the foreground
     // notification then carries the adb command (ProcessLimits.instruction).
     private var limitsNote: String? = null
+    private var sessionDisplayId: Int? = null
 
     private val prefixDir get() = "${applicationContext.filesDir}/usr"
 
@@ -111,6 +112,7 @@ class ProotService : Service() {
             return START_NOT_STICKY
         }
 
+        sessionDisplayId = intent.getIntExtra(EXTRA_DISPLAY_ID, -1).takeIf { it >= 0 }
         val prefs = PhoshdroidPreferences(this)
         width = intent.getIntExtra(EXTRA_WIDTH, 0)
         height = intent.getIntExtra(EXTRA_HEIGHT, 0)
@@ -196,7 +198,7 @@ class ProotService : Service() {
             android.util.Log.w("ProotService", "Could not sync guest time zone", e)
         }
 
-        androidControls = AndroidControls(applicationContext, File(prefixDir)).also { it.start() }
+        androidControls = AndroidControls(applicationContext, File(prefixDir), checkNotNull(commandBuilder).androidSessionId, sessionDisplayId).also { it.start() }
 
         startBroker()
         startProot()
@@ -691,6 +693,7 @@ class ProotService : Service() {
         private const val EXTRA_WIDTH = "width"
         private const val EXTRA_HEIGHT = "height"
         private const val EXTRA_SCALE = "scale"
+        private const val EXTRA_DISPLAY_ID = "displayId"
 
         /** How long a process may take to die after SIGTERM before it is killed. */
         private const val GUEST_STOP_WAIT_S = 3L
@@ -722,6 +725,7 @@ class ProotService : Service() {
             width: Int,
             height: Int,
             scale: Int,
+            displayId: Int? = null,
         ) {
             active = true
             val intent =
@@ -729,6 +733,7 @@ class ProotService : Service() {
                     putExtra(EXTRA_WIDTH, width)
                     putExtra(EXTRA_HEIGHT, height)
                     putExtra(EXTRA_SCALE, scale)
+                    displayId?.let { putExtra(EXTRA_DISPLAY_ID, it) }
                 }
             context.startForegroundService(intent)
         }

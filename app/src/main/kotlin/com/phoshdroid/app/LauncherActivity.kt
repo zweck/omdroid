@@ -769,7 +769,7 @@ class LauncherActivity : AppCompatActivity() {
             }
         logLaunch("ui-scale $sessionScale ${if (scaleOutcome?.written == true) "written" else "kept"}")
         val launchStartedAtMs = System.currentTimeMillis()
-        ProotService.start(this, launchWidth, launchHeight, sessionScale)
+        ProotService.start(this, launchWidth, launchHeight, sessionScale, dock.launchDisplayId ?: display?.displayId)
         logLaunch("session-started")
         statusText.text = getString(R.string.starting_desktop)
 
