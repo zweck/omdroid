@@ -309,6 +309,13 @@ LUA
 link_plugins() {
   local id src dst
   mkdir -p "$plugin_dir"
+  # Shared QML has no manifest and is not itself a plugin. Keep its relative
+  # import beside the five user-directory links (QML resolves their URLs).
+  src="$vendor/plugins/omdroid.android"
+  dst="$plugin_dir/omdroid.android"
+  if [ -d "$src" ] && { [ ! -e "$dst" ] || [ -L "$dst" ]; }; then
+    ln -sfn "$src" "$dst"
+  fi
   for id in $plugin_ids; do
     src="$vendor/plugins/$id"
     dst="$plugin_dir/$id"
@@ -329,6 +336,10 @@ link_plugins() {
 
 unlink_plugins() {
   local id dst
+  dst="$plugin_dir/omdroid.android"
+  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$vendor/plugins/omdroid.android" ]; then
+    rm "$dst"
+  fi
   for id in $plugin_ids; do
     dst="$plugin_dir/$id"
     if [ -L "$dst" ]; then

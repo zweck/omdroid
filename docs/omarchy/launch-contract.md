@@ -1,5 +1,35 @@
 # Launch and geometry contract (host app <-> guest session)
 
+## Android settings bridge
+
+Android owns Wi-Fi, Bluetooth, the display, and the battery. A proot guest has no
+NetworkManager, BlueZ adapter, UPower battery, or physical backlight to control.
+While a session runs, `ProotService` starts `AndroidControls`, which atomically
+publishes `<prefix>/tmp/omdroid-android/state.json` every two seconds. The guest
+sees the same file at `/tmp/omdroid-android/state.json` through its existing tmp
+bind. Version 1 contains a millisecond Unix `timestamp`, boolean radio/power
+states, and a numeric battery percentage. Failed
+reads are null. No network names, addresses, or paired-device lists are exported.
+
+The shared `omdroid.android/AndroidState.qml` validates the schema and field
+types and expires snapshots after ten seconds. The mobile bar and quick settings
+use it only with `OMARCHY_PROOT=1`; other environments keep their Linux backends.
+`omdroid-ui.sh` links this shared module alongside the five mobile plugins.
+
+Taps run `android-control.py`, which atomically renames a unique request into
+`/tmp/omdroid-android/requests/*.request`. The host accepts only `wifi`,
+`bluetooth`, `display`, `rotation`, `volume`, `airplane`, `battery`, and `settings`.
+It opens the corresponding Android Settings activity so Android handles device
+selection, pairing, and changes. This interface accepts no arbitrary intent,
+command, argument, or URL. Requests are limited to 32 bytes, expire after 30
+seconds, are consumed once, and are cleared at session start. Symlinks are ignored.
+
+Only the normal `ACCESS_NETWORK_STATE` and `ACCESS_WIFI_STATE` permissions are
+added. The bridge needs no secure-settings grant, location permission, nearby
+device permission, root, or accessibility service. Android/OEM restrictions on a
+read leave that field unknown; a missing settings activity reports an error.
+Stopping the session stops the worker and removes its status file.
+
 Two agents work against this file in round 2: one owns the host (`app/**`, Kotlin), one owns the
 guest (`rootfs/overlay/etc/phoshdroid/**`). Neither edits this file. If something here is
 wrong or cannot be met, say so at the top of your report with the evidence and work to the

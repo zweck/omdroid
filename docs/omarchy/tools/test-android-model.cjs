@@ -1,0 +1,26 @@
+// Run with node docs/omarchy/tools/test-android-model.cjs.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const model = {};
+vm.createContext(model);
+const file = path.resolve(__dirname, '../../../rootfs/overlay/etc/phoshdroid/omamobile/plugins/omdroid.android/AndroidModel.js');
+vm.runInContext(fs.readFileSync(file, 'utf8').replace(/^\.pragma library\s*$/m, ''), model);
+const read = raw => model.parse(JSON.stringify(raw));
+assert.equal(model.parse('broken').schema, undefined);
+assert.equal(model.parse('x'.repeat(9000)).schema, undefined);
+assert.equal(read({schema: 2, timestamp: 1000}).schema, undefined);
+const valid = read({schema: 1, timestamp: 1000, wifiEnabled: true, wifiConnected: false, batteryPercent: 76});
+assert.equal(valid.wifiEnabled, true);
+assert.equal(valid.wifiConnected, false);
+assert.equal(valid.batteryPercent, 76);
+assert.equal(model.fresh(valid, 1001), true);
+assert.equal(model.fresh(valid, 11000), false);
+assert.equal(model.fresh(valid, 999), false);
+const unsafe = read({schema: 1, timestamp: 1000, wifiEnabled: '<img src="https://invalid/">', bluetoothEnabled: null, batteryPercent: 101, networkName: '<b>network</b>'});
+assert.equal(unsafe.wifiEnabled, undefined);
+assert.equal(unsafe.bluetoothEnabled, undefined);
+assert.equal(unsafe.batteryPercent, undefined);
+assert.equal(unsafe.networkName, undefined);
+console.log('Android status model: malformed, stale, unknown, and markup input checks passed');

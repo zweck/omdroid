@@ -34,6 +34,7 @@ stands on hardware, systemd or a service proot does not have (see the R5 researc
 | `bin/omamobile-cell-watch` | stub; no modem and no ModemManager inside proot. Prints nothing, so the bar shows no carrier icon instead of a restarting process that errors. |
 | `bin/omamobile-call-watch` | stub; no `omatel-agent` and no systemd user units. Same reason. |
 | `SOURCE.md` | this file |
+| `plugins/omdroid.android/` | Shared Android state reader, Qt-translatable labels, and bounded settings request helper. Android owns the hardware hidden by proot. |
 
 ### Changed upstream files
 
@@ -49,6 +50,15 @@ One line per upstream file Omdroid edits, with the device evidence that forced i
 | `plugins/omamobile.bar/Bar.qml` | The cell and call watchers run only while the plugin they stream for is vendored (`omamobile.mobilenetwork`, `omamobile.call`), and their 5 s restart is gated the same way. | Neither plugin is ported, so both watchers are Omdroid stubs that exit at once; upstream's restart-on-exit then forked a dying process every 5 s for the whole session (R11 S2 steady-state count). The gate makes them one-shot: no backend, no retry. |
 | `plugins/omamobile.launcher/Launcher.qml` | The `omamobile-osk-watch` Process and its 3 s restart run only while `omamobile.keyboard` is vendored. | That binary ships with the keyboard plugin, which is not ported: the Process could not exec at all and its timer relaunched a failing exec every 3 s for the whole session (R11 S2 steady-state count). |
 | `plugins/omamobile.launcher/Launcher.qml` | The drawer window unmaps while it is closed: `visible: drawerAlwaysMapped \|\| opened \|\| warm \|\| settle.running`, `open()` maps it and waits one frame (24 ms) before the slide, the dock's tap maps it before its IPC summon, and `OMDROID_DRAWER_MAPPED=1` restores the always-mapped window. | Mapped for the life of the shell it held two 22.97 MiB `wl_shm` buffers — 45.9 MiB, 11.5 MiB of PSS a side — for a drawer most sessions never open (the memory stream measured it on the R10 build). Unmapping it is only safe with the pre-map: mapping on open alone, a new surface's first frames drew before the output's scale applied (the grid at 3x, then a jump), which is why upstream keeps it mapped. |
+
+The bar and quick settings also use `omdroid.android` when `OMARCHY_PROOT=1`.
+Wi-Fi and Bluetooth show Android's state and open its connection/pairing pages;
+battery, airplane mode, rotation lock, and power saver use Android status. Display
+and volume buttons open Android controls instead of unavailable Linux sliders.
+Missing or stale fields remain unknown. This addresses the mobile sheet showing
+"NetworkManager not running", "No adapter", "No sensor", and "No backlight" on
+an Android tablet with working radios and display controls. See the Android
+settings bridge section of `docs/omarchy/launch-contract.md`.
 
 Two upstream frictions were resolved without touching upstream code:
 

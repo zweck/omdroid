@@ -72,4 +72,5 @@
     <string name="share_root_title">Omdroid</string>
     <string name="share_root_summary">The Omarchy home inside Omdroid</string>
     <string name="share_new_document">New document</string>
+    <string name="android_settings_unavailable">This Android settings page is unavailable</string>
 </resources>

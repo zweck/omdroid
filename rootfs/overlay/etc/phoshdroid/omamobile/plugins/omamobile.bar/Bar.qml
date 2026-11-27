@@ -10,6 +10,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Commons as Commons
 import "StatusModel.js" as StatusModel
+import "../omdroid.android" as Android
 
 // Phone status bar, a full `bar` option that replaces omarchy.bar.
 //
@@ -20,6 +21,8 @@ import "StatusModel.js" as StatusModel
 // settings sheet.
 Item {
   id: root
+
+  Android.AndroidState { id: android }
 
   // Injected by the host (see shell.qml configureBar).
   property string omarchyPath: Quickshell.env("OMARCHY_PATH")
@@ -85,11 +88,17 @@ Item {
   readonly property var wiredDevice: StatusModel.findDevice(networkDevices, DeviceType.Wired)
   readonly property var wifiNetwork: StatusModel.connectedNetwork(wifiDevice && wifiDevice.networks ? wifiDevice.networks.values : [])
   readonly property string networkKind: {
+    if (android.hosted) {
+      if (android.value("wifiEnabled") === undefined) return "unknown"
+      if (android.value("wifiEnabled") === false) return "off"
+      return android.value("wifiConnected") === true ? "wifi" : "disconnected"
+    }
     if (wiredDevice && wiredDevice.connected) return "ethernet"
     if (wifiNetwork) return "wifi"
     return wifiDevice && !Networking.wifiEnabled ? "off" : "disconnected"
   }
-  readonly property string networkIcon: StatusModel.networkIcon(networkKind,
+  // Android exports connection state, not a signal-strength reading.
+  readonly property string networkIcon: networkKind === "unknown" ? "" : android.hosted && networkKind === "wifi" ? "󰤨" : StatusModel.networkIcon(networkKind,
     wifiNetwork ? Math.round((wifiNetwork.signalStrength || 0) * 100) : -1)
 
   // The mobile network, from ModemManager's API through
@@ -251,9 +260,9 @@ Item {
   }
 
   readonly property var battery: UPower.displayDevice
-  readonly property bool hasBattery: !!battery && battery.isPresent === true
-  readonly property int batteryPercent: hasBattery ? Math.round(battery.percentage * 100) : -1
-  readonly property bool charging: hasBattery && battery.state === UPowerDeviceState.Charging
+  readonly property bool hasBattery: android.hosted ? android.value("batteryPercent") !== undefined : !!battery && battery.isPresent === true
+  readonly property int batteryPercent: android.hosted ? (android.value("batteryPercent") ?? -1) : hasBattery ? Math.round(battery.percentage * 100) : -1
+  readonly property bool charging: android.hosted ? android.value("charging") === true : hasBattery && battery.state === UPowerDeviceState.Charging
 
   // ---------------------------------------------------------------- host API
 
@@ -416,7 +425,7 @@ Item {
           }
 
           StatusGlyph {
-            visible: root.showBluetooth && !!root.btAdapter && root.btAdapter.enabled
+            visible: root.showBluetooth && (android.hosted ? android.value("bluetoothEnabled") === true : !!root.btAdapter && root.btAdapter.enabled)
             text: root.bluetoothConnected ? "󰂱" : "󰂯"
           }
 
@@ -453,7 +462,7 @@ Item {
             style: root.batteryStyle
             percent: root.batteryPercent
             charging: root.charging
-            full: root.hasBattery && root.battery.state === UPowerDeviceState.FullyCharged
+            full: android.hosted ? android.value("full") === true : root.hasBattery && root.battery.state === UPowerDeviceState.FullyCharged
             foreground: root.foreground
             background: root.background
             urgent: root.urgent

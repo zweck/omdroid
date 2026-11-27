@@ -22,6 +22,7 @@ import com.phoshdroid.app.launch.ProcessLimits
 import com.phoshdroid.app.launch.SessionAction
 import com.phoshdroid.app.launch.SessionRequest
 import com.phoshdroid.app.launch.UiScale
+import com.phoshdroid.app.settings.AndroidControls
 import com.phoshdroid.app.settings.PhoshdroidPreferences
 import com.phoshdroid.app.storage.ShareRule
 import java.io.File
@@ -36,6 +37,7 @@ class ProotService : Service() {
     private var brokerProcess: Process? = null
     private var commandBuilder: ProotCommandBuilder? = null
     private var manager: ProotDistroManager? = null
+    private var androidControls: AndroidControls? = null
 
     private var stopping = false
 
@@ -183,6 +185,8 @@ class ProotService : Service() {
         writeResolvConf()
 
         startRequestWatcher()
+        androidControls = AndroidControls(applicationContext, File(prefixDir)).also { it.start() }
+
         startBroker()
         startProot()
     }
@@ -580,6 +584,8 @@ class ProotService : Service() {
         // Main thread (the notification Stop and onDestroy): no waiting here. A guest that already
         // exited is a no-op; a live one is signalled on its own thread, and the monitor thread returns
         // on `stopping` when it goes.
+        androidControls?.stop()
+        androidControls = null
         prootProcess?.let { proc ->
             ProcessStop.stopAsync("GuestStop", JavaProcessStoppable(proc), GUEST_STOP_WAIT_S * 1000, GUEST_STOP_WAIT_S * 1000) {
                 android.util.Log.i("ProotService", "session: guest process stopped ($it)")
