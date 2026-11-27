@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Request a fixed Android Settings page through the app-private mailbox."""
+"""Request a fixed host control through the app-private mailbox."""
 import os
 from pathlib import Path
 import sys
 import uuid
 
-ACTIONS = {"wifi", "bluetooth", "display", "rotation", "volume", "airplane", "battery", "settings"}
+ACTIONS = {"wifi", "bluetooth", "display", "rotation-lock", "rotation-auto", "volume", "airplane", "battery", "settings"}
 
 
 def main():

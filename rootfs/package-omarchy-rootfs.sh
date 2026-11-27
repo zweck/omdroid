@@ -85,6 +85,7 @@ cp -a "$OVERLAY_DIR/etc/phoshdroid/fake-proc" "$WORK/stage/etc/phoshdroid/fake-p
 # UI mode: the switch reader/installer plus the Omamobile plugin trees it links
 # into ~/.config/omarchy/plugins at session start (docs/omarchy/r5-mobile-ui-report.md).
 cp -a "$OVERLAY_DIR/etc/phoshdroid/omdroid-ui.sh" "$WORK/stage/etc/phoshdroid/omdroid-ui.sh"
+cp -a "$OVERLAY_DIR/etc/phoshdroid/omdroid-app-defaults.py" "$WORK/stage/etc/phoshdroid/omdroid-app-defaults.py"
 cp -a "$OVERLAY_DIR/etc/phoshdroid/omamobile" "$WORK/stage/etc/phoshdroid/omamobile"
 # Fake root for Omarchy's scripts: the broker the host's second proot runs and
 # the sudo client (docs/omarchy/launch-contract.md section 7).
@@ -111,6 +112,8 @@ for tree in mem share complete; do
         cp -a "$OVERLAY_DIR/etc/phoshdroid/$tree" "$WORK/stage/etc/phoshdroid/$tree"
     fi
 done
+cp -a "$OVERLAY_DIR/etc/phoshdroid/guiutils" "$WORK/stage/etc/phoshdroid/guiutils"
+cp -a "$OVERLAY_DIR/etc/phoshdroid/terminal" "$WORK/stage/etc/phoshdroid/terminal"
 chmod 755 "$WORK/stage/etc/phoshdroid/start.sh" "$WORK/stage/etc/phoshdroid/session-child.sh" \
     "$WORK/stage/etc/phoshdroid/omarchy-plugin-index.sh" \
     "$WORK/stage/etc/phoshdroid/omarchy-watch.py" \

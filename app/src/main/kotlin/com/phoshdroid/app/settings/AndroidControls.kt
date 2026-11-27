@@ -15,16 +15,18 @@ import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import com.phoshdroid.app.R
+import com.termux.x11.MainActivity
 import org.json.JSONObject
 import java.io.File
 
-/** Android owns the radios and screen. Publish facts and open its user-mediated controls. */
+/** Publish host state and handle the guest's fixed set of control requests. */
 class AndroidControls(private val context: Context, prefix: File) {
     private val directory = File(prefix, "tmp/omdroid-android")
     private val requestsDirectory = File(directory, "requests")
     private val requests = AndroidControlRequests(requestsDirectory)
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var running = false
+    @Volatile private var refreshRequested = false
     private var worker: Thread? = null
 
     fun start() {
@@ -40,7 +42,8 @@ class AndroidControls(private val context: Context, prefix: File) {
                     try {
                         requests.take().forEach { action -> main.post { if (running) open(action) } }
                         val now = SystemClock.elapsedRealtime()
-                        if (now >= nextState) {
+                        if (refreshRequested || now >= nextState) {
+                            refreshRequested = false
                             publish(System.currentTimeMillis())
                             nextState = now + 2_000
                         }
@@ -89,7 +92,7 @@ class AndroidControls(private val context: Context, prefix: File) {
             }
         }
         field("airplaneMode") { Settings.Global.getInt(resolver, Settings.Global.AIRPLANE_MODE_ON) == 1 }
-        field("rotationLocked") { Settings.System.getInt(resolver, Settings.System.ACCELEROMETER_ROTATION) == 0 }
+        field("rotationLocked") { AndroidRotationLock.locked(MainActivity.getPrefs()?.forceOrientation?.get()) }
         field("powerSave") { power?.isPowerSaveMode }
         field("batteryPercent") {
             val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
@@ -104,11 +107,14 @@ class AndroidControls(private val context: Context, prefix: File) {
     }
 
     private fun open(action: String) {
+        if (action == "rotation-lock" || action == "rotation-auto") {
+            setRotationLock(action == "rotation-lock")
+            return
+        }
         val intentAction = when (action) {
             "wifi" -> Settings.ACTION_WIFI_SETTINGS
             "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
             "display" -> Settings.ACTION_DISPLAY_SETTINGS
-            "rotation" -> Settings.ACTION_AUTO_ROTATE_SETTINGS
             "volume" -> Settings.Panel.ACTION_VOLUME
             "airplane" -> Settings.ACTION_AIRPLANE_MODE_SETTINGS
             "battery" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
@@ -120,6 +126,33 @@ class AndroidControls(private val context: Context, prefix: File) {
         } catch (error: Exception) {
             Log.w("AndroidControls", "Android settings page unavailable: $action", error)
             Toast.makeText(context, R.string.android_settings_unavailable, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setRotationLock(locked: Boolean) {
+        try {
+            val activity = checkNotNull(MainActivity.getInstance())
+            check(!activity.isFinishing && !activity.isDestroyed)
+            val prefs = checkNotNull(MainActivity.getPrefs())
+            val preference = if (locked) {
+                // Repeated lock requests must keep the first chosen orientation.
+                if (AndroidRotationLock.locked(prefs.forceOrientation.get()) == true) return
+                val resources = activity.resources
+                val reverseId = resources.getIdentifier("config_reverseDefaultRotation", "bool", "android")
+                checkNotNull(AndroidRotationLock.currentPreference(
+                    resources.configuration.orientation,
+                    checkNotNull(activity.display).rotation,
+                    reverseId != 0 && resources.getBoolean(reverseId),
+                ))
+            } else "auto"
+            activity.requestedOrientation = AndroidRotationLock.requestedOrientation(preference)
+            // MainActivity reapplies this on focus and after a cold start.
+            prefs.forceOrientation.put(preference)
+        } catch (error: Exception) {
+            Log.w("AndroidControls", "Could not change Omdroid rotation", error)
+            Toast.makeText(context, R.string.android_rotation_unavailable, Toast.LENGTH_SHORT).show()
+        } finally {
+            refreshRequested = true
         }
     }
 }

@@ -91,10 +91,13 @@
                 android:value="0" />
         </activity>
 
-        <!-- Prevent LoriePreferences from auto-launching -->
+        <!-- The extra-keyboard gear opens this explicitly. Disabling it throws
+             ActivityNotFoundException and kills the in-process desktop. It has
+             no launcher filter and remains inaccessible to other apps. -->
         <activity
             android:name="com.termux.x11.LoriePreferences"
-            android:enabled="false"
+            android:enabled="true"
+            android:exported="false"
             tools:replace="android:enabled" />
 
         <!-- Termux:X11's KeyInterceptor accessibility service, relabelled for this APK.

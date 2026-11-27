@@ -17,7 +17,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.sharedPreferencesName = "phoshdroid_prefs"
-        setPreferencesFromResource(R.xml.preferences, rootKey)
+        setPreferencesFromResource(R.xml.omdroid_preferences, rootKey)
 
         findPreference<Preference>("reset_factory")?.setOnPreferenceClickListener {
             showResetConfirmation()

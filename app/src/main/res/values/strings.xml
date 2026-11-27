@@ -73,4 +73,5 @@
     <string name="share_root_summary">The Omarchy home inside Omdroid</string>
     <string name="share_new_document">New document</string>
     <string name="android_settings_unavailable">This Android settings page is unavailable</string>
+    <string name="android_rotation_unavailable">Could not change Omdroid rotation</string>
 </resources>

@@ -33,6 +33,10 @@ export OMARCHY_OUTPUT_WIDTH OMARCHY_OUTPUT_HEIGHT OMARCHY_REFRESH_MHZ OMARCHY_SC
 # The /opt builds are the Android-patched ones (KGSL buffer path); the /usr
 # copies are stock Arch builds and must never come first.
 export PATH=/opt/omarchy-android/hyprland/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# These utilities are built against the pinned image libraries. Carry them in
+# the APK overlay so existing installations gain the dependency as well.
+chmod 755 /etc/phoshdroid/guiutils/bin/hyprland-* /etc/phoshdroid/guiutils/libexec/hyprland-*
+export PATH="/etc/phoshdroid/guiutils/bin:$PATH"
 export XDG_DATA_DIRS=/opt/omarchy-android/hyprland/share:/usr/local/share:/usr/share
 # /etc/phoshdroid/lib comes first: it holds the APK-synced aquamarine with touch
 # (libaquamarine.so.13, see lib/README.md), which wins over the image copy below.
@@ -111,6 +115,15 @@ ln -sfn /etc/phoshdroid/sudo /usr/local/bin/sudo
 chmod 755 /etc/phoshdroid/fakeroot /etc/phoshdroid/yay
 ln -sfn /etc/phoshdroid/fakeroot /usr/local/bin/fakeroot
 ln -sfn /etc/phoshdroid/yay /usr/local/bin/yay
+
+# TUI launchers need the standard terminal helper, omitted by the base image.
+if ! command -v xdg-terminal-exec >/dev/null 2>&1; then
+    chmod 755 /etc/phoshdroid/terminal/xdg-terminal-exec
+    ln -sfn /etc/phoshdroid/terminal/xdg-terminal-exec /usr/local/bin/xdg-terminal-exec
+    mkdir -p /usr/local/share/xdg-terminal-exec
+    ln -sfn /etc/phoshdroid/terminal/xdg-terminals.list /usr/local/share/xdg-terminal-exec/xdg-terminals.list
+fi
+python3 /etc/phoshdroid/omdroid-app-defaults.py
 
 mkdir -p /run/user/1000
 rm -f /run/user/1000/wayland-omarchy /run/user/1000/wayland-omarchy.lock

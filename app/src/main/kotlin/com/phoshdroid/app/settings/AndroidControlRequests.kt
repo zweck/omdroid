@@ -3,7 +3,7 @@ package com.phoshdroid.app.settings
 import java.io.File
 import java.nio.file.Files
 
-/** A private, bounded mailbox. The guest can request settings pages, never commands or intents. */
+/** A private, bounded mailbox for fixed controls, never arbitrary commands or intents. */
 class AndroidControlRequests(private val directory: File) {
     fun take(now: Long = System.currentTimeMillis()): List<String> {
         val requests = directory.listFiles()?.filter { it.name.endsWith(".request") }
@@ -22,7 +22,7 @@ class AndroidControlRequests(private val directory: File) {
     }
 
     companion object {
-        val actions = setOf("wifi", "bluetooth", "display", "rotation", "volume", "airplane", "battery", "settings")
+        val actions = setOf("wifi", "bluetooth", "display", "rotation-lock", "rotation-auto", "volume", "airplane", "battery", "settings")
 
         fun parse(text: String): String? = text.trim().takeIf { text.length <= 32 && it in actions }
     }

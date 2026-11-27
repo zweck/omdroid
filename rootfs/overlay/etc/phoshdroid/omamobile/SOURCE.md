@@ -53,7 +53,9 @@ One line per upstream file Omdroid edits, with the device evidence that forced i
 
 The bar and quick settings also use `omdroid.android` when `OMARCHY_PROOT=1`.
 Wi-Fi and Bluetooth show Android's state and open its connection/pairing pages;
-battery, airplane mode, rotation lock, and power saver use Android status. Display
+battery, airplane mode, and power saver use Android status. Rotation lock directly
+sets the embedded display's persisted orientation and keeps the sheet open;
+unlock follows Android's device rotation policy. Display
 and volume buttons open Android controls instead of unavailable Linux sliders.
 Missing or stale fields remain unknown. This addresses the mobile sheet showing
 "NetworkManager not running", "No adapter", "No sensor", and "No backlight" on

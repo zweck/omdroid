@@ -9,9 +9,11 @@ import java.nio.file.Files
 class AndroidControlRequestsTest {
     @TempDir lateinit var directory: File
 
-    @Test fun `only fixed settings pages are accepted`() {
+    @Test fun `only fixed settings pages and rotation directions are accepted`() {
         assertEquals("wifi", AndroidControlRequests.parse("wifi\n"))
-        for (input in listOf("intent:evil", "wifi; reboot", "../settings", "volume 100", "x".repeat(100))) {
+        assertEquals("rotation-lock", AndroidControlRequests.parse("rotation-lock"))
+        assertEquals("rotation-auto", AndroidControlRequests.parse("rotation-auto"))
+        for (input in listOf("rotation", "rotation-toggle", "intent:evil", "wifi; reboot", "../settings", "volume 100", "x".repeat(100))) {
             assertNull(AndroidControlRequests.parse(input))
         }
     }

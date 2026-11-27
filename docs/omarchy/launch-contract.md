@@ -18,9 +18,16 @@ use it only with `OMARCHY_PROOT=1`; other environments keep their Linux backends
 
 Taps run `android-control.py`, which atomically renames a unique request into
 `/tmp/omdroid-android/requests/*.request`. The host accepts only `wifi`,
-`bluetooth`, `display`, `rotation`, `volume`, `airplane`, `battery`, and `settings`.
-It opens the corresponding Android Settings activity so Android handles device
-selection, pairing, and changes. This interface accepts no arbitrary intent,
+`bluetooth`, `display`, `rotation-lock`, `rotation-auto`, `volume`, `airplane`,
+`battery`, and `settings`. Rotation requests directly change the embedded
+display's persisted `forceOrientation` preference: lock captures its current
+portrait/landscape orientation, including reverse orientations, and auto resumes
+following Android's device rotation policy. The tile stays open, waits for the
+reported state, and sends an explicit direction so duplicate requests cannot
+undo a lock. Its `rotationLocked` field describes this app-specific lock, not
+Android's global rotation setting. No system setting or permission is changed.
+Other requests open the corresponding Android Settings activity so Android
+handles device selection, pairing, and changes. This interface accepts no arbitrary intent,
 command, argument, or URL. Requests are limited to 32 bytes, expire after 30
 seconds, are consumed once, and are cleared at session start. Symlinks are ignored.
 
@@ -29,6 +36,11 @@ added. The bridge needs no secure-settings grant, location permission, nearby
 device permission, root, or accessibility service. Android/OEM restrictions on a
 read leave that field unknown; a missing settings activity reports an error.
 Stopping the session stops the worker and removes its status file.
+
+The extra-keyboard preferences button opens the enabled, non-exported
+`com.termux.x11.LoriePreferences` activity. It has no launcher intent filter.
+Disabling this activity makes the embedded keyboard's explicit launch throw
+`ActivityNotFoundException`, terminating the app and its in-process Linux session.
 
 Two agents work against this file in round 2: one owns the host (`app/**`, Kotlin), one owns the
 guest (`rootfs/overlay/etc/phoshdroid/**`). Neither edits this file. If something here is
@@ -145,6 +157,32 @@ not work under proot) and `su`/`run0`/`pkexec` cannot help, but 70 of Omarchy's 
 - **What it is**: fake root only. Everything still runs as the Android app's own uid inside its
   private storage, so `sudo` grants no privilege it did not already have. `systemctl` still does
   not work (there is no systemd in this guest).
+
+## Guest time zone and dialog utilities
+
+Before starting the broker or desktop, `ProotService` synchronizes the guest's
+`/etc/localtime` with Android's named time zone through `GuestTimezone`. The
+relative symlink points into the guest's installed tzdata, so the clock, calendar
+and applications share local time and daylight-saving rules. Missing or invalid
+zone data preserves the previous configuration. A host time-zone change is
+applied when the next guest session starts; the guest does not run a time daemon.
+
+`/etc/phoshdroid/guiutils/bin` is on the session PATH. These actual Hyprland GUI
+utilities use the upstream Qt implementation, built against the pinned image's
+libraries with software rendering. The newer hyprtoolkit implementation requires
+dmabuf v4 and DRM render nodes that this guest cannot provide. This avoids a partial
+system upgrade. Both the rootfs packager and APK overlay carry them, so updated
+installations receive the same runtime dependency as fresh installations.
+See `rootfs/build-guiutils.sh` and the accompanying provenance and license.
+
+The overlay also carries the standard `xdg-terminal-exec` script, used only if
+the guest has no existing terminal execution helper. `omdroid-app-defaults.py`
+selects installed Nano when the image lacks Neovim and no editor choice exists.
+It migrates only the exact stock Chromium flags file to native Wayland with
+software rendering, saving an exclusive `.before-omdroid-wayland` backup first.
+Customized flags, browser profiles and existing editor choices are preserved.
+Software browser rendering trades acceleration for compatibility with this
+nested compositor; it does not change the guest compositor's GPU configuration.
 
 ## 8. Docking (monitor, keyboard, mouse)
 
