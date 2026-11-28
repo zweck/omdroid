@@ -20,9 +20,15 @@ export OMDROID_COMPLETE_REAL_XTE=$T/no-such-xte OMDROID_COMPLETE_NVIM=no-such-nv
 export OMDROID_COMPLETE_CLIPBOARD=0
 # The browser section links each Chromium-family name the image has; a fake /usr/bin keeps
 # that independent of what this host happens to install.
-mkdir -p "$T/usrbin"
-for b in brave chromium; do printf '#!/bin/sh\n' > "$T/usrbin/$b"; chmod 755 "$T/usrbin/$b"; done
-export OMDROID_COMPLETE_USRBIN=$T/usrbin
+# Each fake prints its arguments one per line, so the launcher section can read back
+# exactly what the real browser would be started with. The desktop entries live in a
+# scratch tree too: Chromium's names its binary by full path, Brave's does not.
+mkdir -p "$T/usrbin" "$T/apps-src" "$T/etc"
+for b in brave chromium; do printf '#!/bin/sh\nprintf "%%s\\n" "$@"\n' > "$T/usrbin/$b"; chmod 755 "$T/usrbin/$b"; done
+printf '[Desktop Entry]\nName=Chromium\nExec=/usr/bin/chromium %%U\nActions=new-window;\n\n[Desktop Action new-window]\nName=New Window\nExec=/usr/bin/chromium\n' > "$T/apps-src/chromium.desktop"
+printf '[Desktop Entry]\nName=Brave\nExec=brave %%U\n' > "$T/apps-src/brave.desktop"
+export OMDROID_COMPLETE_USRBIN=$T/usrbin OMDROID_COMPLETE_APPS_SRC=$T/apps-src OMDROID_COMPLETE_APPS=$T/apps OMDROID_COMPLETE_ETC=$T/etc
+unset XDG_CONFIG_HOME OMDROID_GPU
 export OMDROID_COMPLETE_LOG=$T/hook.log OMDROID_HOST_DIR=$T/host OMDROID_SESSION_WAIT_DS=8
 mkdir -p "$HOME/.config/hypr" "$HOME/.config/omarchy/extensions"
 printf -- '-- user looknfeel\nhl.config({ general = { gaps_in = 3 } })\n' > "$HOME/.config/hypr/looknfeel.lua"
@@ -164,8 +170,44 @@ OMDROID_COMPLETE_CLIPBOARD=0 OMDROID_COMPLETE_BROWSER=1 OMDROID_COMPLETE_USRBIN=
 check "browser: the switch on links an installed browser to the launcher" "[ \"\$(readlink $T/bin/brave)\" = \"$D/bin/chromium-proot\" ] && [ -x $D/bin/chromium-proot ]"
 check "browser: the second family member shares that launcher" "[ \"\$(readlink $T/bin/chromium)\" = \"$D/bin/chromium-proot\" ]"
 check "browser: a browser the image lacks is not linked" "[ ! -e $T/bin/vivaldi-stable ]"
+check "browser: an entry that names its binary by full path gets a copy that does not" "grep -qx 'Exec=chromium %U' $T/apps/chromium.desktop && grep -qx 'Exec=chromium' $T/apps/chromium.desktop && ! grep -q '^Exec=/usr/bin/' $T/apps/chromium.desktop"
+check "browser: the copy keeps every other line of the entry" "[ \"\$(grep -v '^Exec=' $T/apps/chromium.desktop | sed '\$d')\" = \"\$(grep -v '^Exec=' $T/apps-src/chromium.desktop)\" ]"
+check "browser: an entry that already names it bare gets no copy" "[ ! -e $T/apps/brave.desktop ]"
+# A read of the source entry that fails keeps the good copy: a sed that fails on that one
+# file stands in for the entry vanishing between the check and the read.
+mkdir -p "$T/failsed"
+printf '#!/bin/bash\nfor a; do case "$a" in */apps-src/chromium.desktop) exit 2 ;; esac; done\nexec %s "$@"\n' "$(command -v sed)" > "$T/failsed/sed"
+chmod 755 "$T/failsed/sed"
+PATH=$T/failsed:$PATH OMDROID_COMPLETE_CLIPBOARD=0 OMDROID_COMPLETE_BROWSER=1 bash "$D/session-start.sh" > /dev/null 2>&1
+check "browser: a failed read of the source entry keeps the previous copy" "grep -qx 'Exec=chromium %U' $T/apps/chromium.desktop && grep -qx '\[Desktop Entry\]' $T/apps/chromium.desktop && [ ! -e $T/apps/chromium.desktop.new ]"
+
+# The launcher itself, run through the link the hook made. Chromium's flags file is the
+# image's shape: ANGLE on Vulkan with the Vulkan features on. Brave has no flags file.
+printf '%s\n' '# image defaults' '--ozone-platform=x11' '--enable-features=Vulkan,VulkanFromANGLE,DefaultANGLEVulkan' \
+    '--use-gl=angle' '--use-angle=vulkan' > "$HOME/.config/chromium-flags.conf"
+SANDBOX_OFF="--no-sandbox --disable-dev-shm-usage --password-store=basic"
+SOFTWARE_GL="--use-angle=gles --disable-gpu-compositing"
+run() { "$@" | tr '\n' ' ' | sed 's/ $//'; }   # the arguments the fake browser received, on one line
+check "launcher: kgsl mode passes only the sandbox flags" "[ \"\$(OMDROID_GPU=kgsl run $T/bin/chromium https://a.test)\" = \"$SANDBOX_OFF https://a.test\" ]"
+check "launcher: no mode at all passes only the sandbox flags" "[ \"\$(run $T/bin/chromium https://a.test)\" = \"$SANDBOX_OFF https://a.test\" ]"
+check "launcher: software mode answers a Vulkan flags file with ANGLE on GLES and software compositing" "[ \"\$(OMDROID_GPU=software run $T/bin/chromium https://a.test)\" = \"$SANDBOX_OFF $SOFTWARE_GL https://a.test\" ]"
+check "launcher: the caller's own choice comes last, so it still wins" "[ \"\$(OMDROID_GPU=software run $T/bin/chromium --use-angle=swiftshader --app=https://a.test)\" = \"$SANDBOX_OFF $SOFTWARE_GL --use-angle=swiftshader --app=https://a.test\" ]"
+check "launcher: software mode leaves a browser without a Vulkan flags file alone" "[ \"\$(OMDROID_GPU=software run $T/bin/brave https://a.test)\" = \"$SANDBOX_OFF https://a.test\" ]"
+printf '%s\n' '--use-angle=vulkan' > "$T/etc/brave-flags.conf"; printf '%s\n' '--use-angle=gl' > "$HOME/.config/brave-flags.conf"
+check "launcher: the last --use-angle of the flags files decides, as it does for the browser" "[ \"\$(OMDROID_GPU=software run $T/bin/brave)\" = \"$SANDBOX_OFF\" ]"
+
+# A desktop entry somebody else put in the override directory is neither replaced nor removed.
+printf '[Desktop Entry]\nName=Mine\nExec=/opt/mine\n' > "$T/apps/chromium.desktop"
+OMDROID_COMPLETE_CLIPBOARD=0 OMDROID_COMPLETE_BROWSER=1 bash "$D/session-start.sh" > /dev/null 2>&1
+check "browser: an entry this hook did not write is not replaced" "grep -qx 'Exec=/opt/mine' $T/apps/chromium.desktop"
+OMDROID_COMPLETE_CLIPBOARD=0 OMDROID_COMPLETE_BROWSER=0 bash "$D/session-start.sh" > /dev/null 2>&1
+check "browser: nor removed by the switch off" "grep -qx 'Exec=/opt/mine' $T/apps/chromium.desktop"
+rm -f "$T/apps/chromium.desktop"
+OMDROID_COMPLETE_CLIPBOARD=0 OMDROID_COMPLETE_BROWSER=1 bash "$D/session-start.sh" > /dev/null 2>&1
+check "browser: the copy comes back once that entry is gone" "grep -qx 'Exec=chromium %U' $T/apps/chromium.desktop"
 OMDROID_COMPLETE_CLIPBOARD=0 OMDROID_COMPLETE_BROWSER=0 OMDROID_COMPLETE_USRBIN=$T/usrbin bash "$D/session-start.sh" > /dev/null 2>&1
 check "browser: the switch off removes the links" "[ ! -e $T/bin/brave ] && [ ! -e $T/bin/chromium ]"
+check "browser: the switch off removes the entry copy" "[ ! -e $T/apps/chromium.desktop ]"
 
 rm -rf "$T"
 [ $fail = 0 ] && echo "all passed" || echo FAILED

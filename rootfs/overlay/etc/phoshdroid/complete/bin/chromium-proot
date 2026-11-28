@@ -21,9 +21,35 @@
 #
 # Electron apps are a separate case: they honour ELECTRON_DISABLE_SANDBOX=1 from the
 # session environment rather than a wrapper, and the image has none installed.
+#
+# Software GPU mode. The image's ~/.config/chromium-flags.conf asks for ANGLE on Vulkan
+# (--use-angle=vulkan plus the Vulkan features), which is the Adreno path: it needs the
+# freedreno ICD. In software mode (OMDROID_GPU=software, launch-contract.md section 9)
+# VK_ICD_FILENAMES is unset and the image has no lavapipe, so that request cannot be met:
+# the GPU process fails EGL initialisation and exits, and the browser runs without one,
+# so without WebGL. When the browser's flags file makes that request, this launcher
+# answers with ANGLE on GLES, which Mesa llvmpipe serves, and turns GPU compositing off:
+# drawing every frame through llvmpipe costs frame rate that the software compositor does
+# not. The real launcher puts the file's flags before its arguments and Chromium keeps
+# the last value of a switch, so the order is: flags file, then these, then the caller,
+# who can still choose otherwise. A browser whose flags file does not ask for Vulkan is
+# left exactly as before. The flags files are read one switch per line, the shape the
+# image's file has; a --use-angle placed mid-line is not seen.
+#
+# OMDROID_COMPLETE_ETC and OMDROID_COMPLETE_USRBIN stand in for /etc and /usr/bin, like
+# the other OMDROID_COMPLETE_* overrides, so complete-hook-test.sh can run the launcher
+# against fake browsers. Nothing in a session sets them.
 name=${0##*/}
-exec "/usr/bin/$name" \
+gl=()
+if [ "${OMDROID_GPU:-}" = software ]; then
+    angle=$(cat "${OMDROID_COMPLETE_ETC:-/etc}/$name-flags.conf" \
+        "${XDG_CONFIG_HOME:-$HOME/.config}/$name-flags.conf" 2> /dev/null \
+        | sed -n 's/^[[:space:]]*--use-angle=\([^[:space:]]*\).*/\1/p' | tail -n 1)
+    [ "$angle" = vulkan ] && gl=(--use-angle=gles --disable-gpu-compositing)
+fi
+exec "${OMDROID_COMPLETE_USRBIN:-/usr/bin}/$name" \
     --no-sandbox \
     --disable-dev-shm-usage \
     --password-store=basic \
+    "${gl[@]}" \
     "$@"

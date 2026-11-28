@@ -184,16 +184,42 @@ fi
 # family: it takes the name it was called by, and only names the image actually has are
 # linked, so /usr/local/bin/brave and /usr/local/bin/chromium both get the flags from
 # a desktop entry, the menu, omarchy-launch-browser or a terminal.
+#
+# A desktop entry that names its binary by full path walks past that link: Arch's
+# chromium.desktop says Exec=/usr/bin/chromium %U. For such an entry a copy goes into
+# /usr/local/share/applications, which XDG_DATA_DIRS lists before /usr/share, with the
+# path dropped from every Exec line so PATH finds the launcher. The copy is rewritten
+# each session (a package update is picked up) and carries a last-line marker, so only
+# a file this hook wrote is ever replaced or removed.
 browser=${OMDROID_COMPLETE_BROWSER:-1}
 browsers="brave chromium google-chrome-stable microsoft-edge-stable vivaldi-stable opera"
+APPS_SRC=${OMDROID_COMPLETE_APPS_SRC:-/usr/share/applications}
+APPS=${OMDROID_COMPLETE_APPS:-/usr/local/share/applications}
+entry_mark="# omdroid-complete: Exec without /usr/bin, so the launcher in /usr/local/bin runs"
+entry_is_ours() { [ "$(tail -n 1 "$APPS/$1.desktop" 2> /dev/null)" = "$entry_mark" ]; }
+entry_ours() { # $1 browser name
+    if grep -Eqs "^Exec=/usr/bin/$1( |\$)" "$APPS_SRC/$1.desktop" \
+            && { [ ! -e "$APPS/$1.desktop" ] || entry_is_ours "$1"; }; then
+        mkdir -p "$APPS"
+        # Each step gates the next: a failed read leaves the previous copy in place
+        # rather than installing a file that holds only the marker.
+        sed -E "s#^Exec=/usr/bin/$1( |\$)#Exec=$1\\1#" "$APPS_SRC/$1.desktop" > "$APPS/$1.desktop.new" \
+            && echo "$entry_mark" >> "$APPS/$1.desktop.new" \
+            && mv -f "$APPS/$1.desktop.new" "$APPS/$1.desktop"
+        rm -f "$APPS/$1.desktop.new"
+    elif entry_is_ours "$1"; then
+        rm -f "$APPS/$1.desktop"
+    fi
+}
 if [ "$browser" != 0 ]; then
     for name in $browsers; do
-        [ -x "$USRBIN/$name" ] && link_ours "$name" "$D/bin/chromium-proot"
+        [ -x "$USRBIN/$name" ] && { link_ours "$name" "$D/bin/chromium-proot"; entry_ours "$name"; }
     done
     say "browser: chromium-family browsers launch with the sandbox off (proot)"
 else
     for name in $browsers; do
         [ "$(readlink "$BIN/$name" 2> /dev/null)" = "$D/bin/chromium-proot" ] && rm -f "$BIN/$name"
+        entry_is_ours "$name" && rm -f "$APPS/$name.desktop"
     done
     say "browser: the image launchers kept (switch)"
 fi

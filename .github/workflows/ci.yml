@@ -26,3 +26,6 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew :app:test
+
+      - name: Completeness hook host test
+        run: bash docs/omarchy/tools/complete-hook-test.sh
