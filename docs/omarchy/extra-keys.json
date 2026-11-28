@@ -1,0 +1,10 @@
+[
+  [
+    "ESC", "/", {"key": "-", "popup": "|"}, "HOME", "UP", "END", "PGUP",
+    {"macro": "META w", "display": "CLOSE"}, "PREFERENCES"
+  ],
+  [
+    "TAB", "CTRL", "ALT", {"key": "META", "display": "SUPER"},
+    "LEFT", "DOWN", "RIGHT", "PGDN", "KEYBOARD"
+  ]
+]

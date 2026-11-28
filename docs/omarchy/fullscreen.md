@@ -51,12 +51,30 @@ guest application's window state are three separate checks.
 
 ## Leaving a fullscreen guest app by touch
 
+First tap the floating keyboard button to hide any extra-key rows and Android's
+letter keyboard. These overlays cover the bottom gesture area, so a swipe starting
+on them cannot reach the guest. Android may also reveal its own navigation bar
+when a gesture starts at the physical edge.
+
 Swipe a short distance upward from the bottom center and release to return to the
 desktop. The app stays open. The gesture starts in a transparent area 180 logical
 pixels wide and 18 logical pixels high, centered on the bottom edge. It draws no
 pill and reserves no space. A tap there does not go Home or open the keyboard;
 the small region is reserved for the swipe rather than the underlying app's taps.
-The existing longer swipe or swipe-and-hold opens recent apps.
+The existing longer swipe or swipe-and-hold opens recent apps. Swipe upward on an
+app's card to close its window; swipe sideways to browse the cards.
+
+For a button instead of a gesture, use the optional
+[extra-key layout](extra-keys.json). It adds **CLOSE** and **SUPER** to the two
+existing rows, keeping the other keys. Open the extra-key bar, tap its gear, and
+paste the JSON into the **Extra keys config** preference. Save any custom
+layout first. This is an optional saved preference, not a change to the default
+Termux:X11 layout.
+
+Tap **CLOSE** to send Omarchy's **Super+W** window-close shortcut. **Ctrl+W** is an
+application shortcut and is not a reliable way to close the active desktop window.
+The separate **SUPER** key is the extra-key modifier named `META` internally.
+The **HOME** key sends the keyboard Home key; it does not return to the desktop.
 
 The mobile status bar stays below fullscreen windows, including when the shell
 remaps its surfaces after rotation. Normal windows still respect its reserved
@@ -69,6 +87,10 @@ returned Home, a tap did not navigate away, and no bottom space was reserved.
 Rotation and keyboard dismissal preserved the full display bounds. These checks
 used the installed local integration with the same QML and window rule; they do
 not cover multiple monitors or an APK built from the complete PR branch.
+The optional CLOSE button and the recent-apps card swipe each closed a disposable
+terminal on the portrait tablet while preserving the existing browser windows.
+Recent Apps opened from both a normal window and a fullscreen window with the
+keyboard overlays hidden.
 
 ## OpenDisplay receiver setup
 
