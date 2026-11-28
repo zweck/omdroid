@@ -44,7 +44,7 @@ Highly experimental. Every measurement below was taken on one device: a Xiaomi P
 a 3200x2136 panel and 12 GB of RAM. The owner also runs 0.0.15 on his Samsung foldable phone
 (Android 17, Adreno 840) and reports that it works well; nothing on the phone was measured. The
 current Omdroid build is the
-[`v0.0.21-alpha`](https://github.com/zweck/omdroid/releases/tag/v0.0.21-alpha) pre-release; the
+[`v0.0.22-alpha`](https://github.com/zweck/omdroid/releases/tag/v0.0.22-alpha) pre-release; the
 APKs of releases 0.0.13 to 0.0.17 were withdrawn because they embedded a build-machine path
 (their notes stay up, `docs/omarchy/r10-release-0.0.18.md`), and the APKs of the Phoshdroid
 releases 0.0.1 to 0.0.12 were withdrawn with a note pointing here (their notes stay up too). Releases before `v0.0.14-alpha` are
@@ -98,6 +98,10 @@ Not verified yet:
   `docs/omarchy/r6-sudo-report.md`.
 - Docking on the phone: Samsung DeX, whether a real unplug survives Samsung's teardown, and the
   phone's monitor density. The checklist is in `docs/omarchy/r7-dock-device-report.md`.
+- The rotation lock's refusal path: on this tablet HyperOS does not enforce the `WRITE_SETTINGS`
+  app-op, so a refused write could not be produced on hardware and is covered by tests instead; a
+  timezone id the guest rejects leaves it on UTC with no log line yet. See
+  `docs/omarchy/r13-report.md`.
 - Docking with the round 12 additions: the Android bridge's tiles and the key bar's summon button
   have only been used undocked, on the tablet's own panel; picture-in-picture for that button is
   untested. The keyboard-settings gear was tapped on the 0.0.21 candidate: the preferences screen
@@ -317,8 +321,8 @@ service is not enabled and the log says so (`launch: key-capture no WRITE_SECURE
 
 ## Build and install
 
-To install the pre-release, download `omdroid-0.0.21-alpha.apk` (about 1.1 GB) from the
-[`v0.0.21-alpha` release](https://github.com/zweck/omdroid/releases/tag/v0.0.21-alpha) and sideload it: `adb install omdroid-0.0.21-alpha.apk`,
+To install the pre-release, download `omdroid-0.0.22-alpha.apk` (about 1.1 GB) from the
+[`v0.0.22-alpha` release](https://github.com/zweck/omdroid/releases/tag/v0.0.22-alpha) and sideload it: `adb install omdroid-0.0.22-alpha.apk`,
 or open the file from a file manager on the device. HyperOS and MIUI refuse `adb install`;
 see the end of this section. The first start extracts the guest; that took 104 s on the test
 tablet (it took 284 s with the 0.0.17-era image).
