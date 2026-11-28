@@ -327,7 +327,9 @@ Item {
       exclusionMode: ExclusionMode.Auto
       color: root.background
       WlrLayershell.namespace: "omarchy-bar"
-      WlrLayershell.layer: WlrLayer.Top
+      // Normal windows respect the exclusive zone. Fullscreen windows must
+      // cover this bar even when it remaps after rotation, like the home strip.
+      WlrLayershell.layer: WlrLayer.Bottom
 
       // Above the strip's touch area (below), so the call chip takes its
       // own taps; nothing else in here handles touches, so the rest still
