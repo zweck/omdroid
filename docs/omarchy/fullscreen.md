@@ -29,7 +29,10 @@ Android permission is needed.
 ## Extra keys and guest bars
 
 The extra-key bar starts hidden, and the bottom-right keyboard button toggles it as
-an overlay. It should not shrink the guest output. On the test tablet, the guest
+an overlay. When either the extra-key bar or Android's letter keyboard is visible,
+that button dismisses both, including Android's keyboard toolbar. With both hidden,
+it shows the extra-key bar again; the keyboard key in that bar opens Android's
+letter keyboard. The extra-key bar should not shrink the guest output. On the test tablet, the guest
 stayed 2800×1752 with the key bar both visible and hidden. An older APK reserved
 160 pixels and exposed a 2800×1592 guest output; update to a build containing
 [#17](https://github.com/zweck/omdroid/pull/17).
