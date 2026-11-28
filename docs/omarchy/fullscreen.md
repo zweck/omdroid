@@ -37,8 +37,9 @@ stayed 2800×1752 with the key bar both visible and hidden. An older APK reserve
 160 pixels and exposed a 2800×1592 guest output; update to a build containing
 [#17](https://github.com/zweck/omdroid/pull/17).
 
-The guest shell's top bar and home panel are part of the desktop. An application
-that needs the whole guest monitor must request fullscreen itself. Check with:
+The guest shell's top bar and home panel are part of the desktop. In mobile mode,
+the YouTube web app opens fullscreen. Other applications use their own fullscreen
+control. Check the guest window state with:
 
 ```sh
 docs/omarchy/tools/hc.sh j/monitors j/clients
@@ -47,6 +48,27 @@ docs/omarchy/tools/hc.sh j/monitors j/clients
 At scale 2, a fullscreen window on the test tablet reports position `[0,0]`, size
 `[1400,876]`, and `fullscreen: 2`. Android fullscreen, guest output size, and the
 guest application's window state are three separate checks.
+
+## Leaving a fullscreen guest app by touch
+
+Swipe a short distance upward from the bottom center and release to return to the
+desktop. The app stays open. The gesture starts in a transparent area 180 logical
+pixels wide and 18 logical pixels high, centered on the bottom edge. It draws no
+pill and reserves no space. A tap there does not go Home or open the keyboard;
+the small region is reserved for the swipe rather than the underlying app's taps.
+The existing longer swipe or swipe-and-hold opens recent apps.
+
+The mobile status bar stays below fullscreen windows, including when the shell
+remaps its surfaces after rotation. Normal windows still respect its reserved
+height and keep their usual navigation strip. The YouTube fullscreen rule belongs
+to the managed mobile block and is removed when switching back to desktop mode.
+
+On the test tablet, the same running YouTube window filled 1752×2800 in portrait
+and 2800×1752 in landscape. In both orientations, a short bottom-center swipe
+returned Home, a tap did not navigate away, and no bottom space was reserved.
+Rotation and keyboard dismissal preserved the full display bounds. These checks
+used the installed local integration with the same QML and window rule; they do
+not cover multiple monitors or an APK built from the complete PR branch.
 
 ## OpenDisplay receiver setup
 

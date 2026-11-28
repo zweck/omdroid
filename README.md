@@ -217,6 +217,9 @@ a file the shell re-reads in place.
 - **DeX fullscreen.** A Samsung tablet can reopen Omdroid as a floating task. Use its
   fullscreen caption button or the explicit [ADB fullscreen helper](docs/omarchy/fullscreen.md)
   before starting a receiver that detects its output size at startup.
+- **Mobile app fullscreen.** YouTube opens edge to edge. A short swipe up from the
+  bottom center returns Home without closing the app; fullscreen has no visible
+  home pill or reserved bottom strip. The status bar stays covered after rotation.
 - **Not proven yet.** External-monitor Samsung DeX and whether unplug survives Samsung's
   teardown; only a Samsung phone can show those. The owner's dock test confirmed typing, the pointer and clicks; trackpad
   gestures beyond those were tried by hand, not measured.

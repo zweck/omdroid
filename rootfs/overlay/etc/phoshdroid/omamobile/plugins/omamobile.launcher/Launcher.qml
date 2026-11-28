@@ -774,6 +774,32 @@ Item {
     }
   }
 
+  // Keep a bottom-center swipe route out of fullscreen without drawing
+  // over the app or reserving space. Taps here must not navigate away.
+  Variants {
+    model: Quickshell.screens
+
+    PanelWindow {
+      required property var modelData
+      screen: modelData
+      visible: root.fullscreenOnScreen && !root.opened && !root.sessionLocked
+      anchors { bottom: true }
+      implicitWidth: 180
+      implicitHeight: 18
+      exclusionMode: ExclusionMode.Ignore
+      color: "transparent"
+      WlrLayershell.namespace: "omamobile-fullscreen-home"
+      WlrLayershell.layer: WlrLayer.Overlay
+      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+      HomeSwipe {
+        anchors.fill: parent
+        strip: "fullscreen"
+        gesturesOnly: true
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- drawer
 
   PanelWindow {
@@ -1237,6 +1263,8 @@ Item {
   component HomeSwipe: Item {
     id: swipeArea
     property string strip: "pill"
+    // The invisible fullscreen edge supports swipes, without tap actions.
+    property bool gesturesOnly: false
     // Items over the strip whose taps are their own: a tap there is never
     // half of a double tap, and a hold there isn't the pill's. None since
     // 0.2.61 (the pill is the whole bar), kept for keys a layout may add.
@@ -1265,6 +1293,7 @@ Item {
     // swipe (home or recent apps).
     TapHandler {
       id: doubleTap
+      enabled: !swipeArea.gesturesOnly
       property bool lastOwn: false
       longPressThreshold: root.voice ? 0.45 : 3600
       onLongPressed: {
