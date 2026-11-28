@@ -269,12 +269,6 @@ hl.config({ general = { gaps_in = 0, gaps_out = 0, border_size = 0 } })
 -- as a phone does. A mouse brings it back. The stock config sets this false.
 hl.config({ cursor = { hide_on_touch = true } })
 hl.window_rule({ match = { class = ".*" }, tag = "-default-opacity", opacity = "1 1" })
--- The YouTube web app uses the whole mobile display. The launcher keeps a
--- bottom-center swipe available to return home without a visible home strip.
-hl.window_rule({
-  match = { class = "^chrome-youtube[.]com__-Default$" },
-  fullscreen = true,
-})
 hl.window_rule({
   match = { modal = true },
   maximize = false,

@@ -2,6 +2,8 @@
 
 Omdroid's guest fits its Android window. In DeX, an immersive Android window can still
 be a floating task: hiding the Android bars does not make that task fill the display.
+Filling the Android display does not require fullscreen guest applications or
+hiding Omarchy's workspace bar.
 On the tested Samsung SM-X800, a fresh launch opened a 1514×1138 floating window on
 the 2800×1752 built-in display, despite the DeX fullscreen launch metadata.
 
@@ -26,6 +28,31 @@ connection script should run the helper after the display activity becomes activ
 and before starting a client that detects its output size at startup. No new
 Android permission is needed.
 
+## Keeping Omarchy's workspace bar
+
+The mobile UI replaces the desktop bar with a phone status bar containing a clock
+and connectivity icons. It does not show Omarchy's workspace buttons, even on an
+empty desktop. To keep the standard desktop bar on the tablet, run inside the guest:
+
+```sh
+mkdir -p ~/.config/omdroid
+printf 'desktop\n' > ~/.config/omdroid/ui-pin
+```
+
+The session watcher applies the change and restarts only the shell. Open apps
+stay running, and the Android window still fills the tablet. The pin survives
+rotation, docking and subsequent launches. Set it to `auto` to follow the host's
+mobile/desktop choice again. Desktop mode uses Omarchy's workspace bar and app
+launcher in place of the phone Home strip and Recent Apps gestures.
+
+Guest applications normally leave the bar visible. Use an application's explicit
+fullscreen control only when you want that application to cover the desktop bar
+too. Omdroid does not force the YouTube web app into fullscreen.
+
+On the test tablet, the standard 26-logical-pixel bar remained visible above the
+running YouTube window at 1752×2800 and 2800×1752. Tapping a workspace selected it,
+no bottom strip was reserved, and the open app survived the mode change and rotation.
+
 ## Extra keys and guest bars
 
 The extra-key bar starts hidden, and the bottom-right keyboard button toggles it as
@@ -37,9 +64,8 @@ stayed 2800×1752 with the key bar both visible and hidden. An older APK reserve
 160 pixels and exposed a 2800×1592 guest output; update to a build containing
 [#17](https://github.com/zweck/omdroid/pull/17).
 
-The guest shell's top bar and home panel are part of the desktop. In mobile mode,
-the YouTube web app opens fullscreen. Other applications use their own fullscreen
-control. Check the guest window state with:
+The guest shell's top bar and home panel are part of the desktop. Applications use
+their own fullscreen control. Check the guest window state with:
 
 ```sh
 docs/omarchy/tools/hc.sh j/monitors j/clients
@@ -49,7 +75,7 @@ At scale 2, a fullscreen window on the test tablet reports position `[0,0]`, siz
 `[1400,876]`, and `fullscreen: 2`. Android fullscreen, guest output size, and the
 guest application's window state are three separate checks.
 
-## Leaving a fullscreen guest app by touch
+## Leaving a fullscreen guest app by touch in mobile mode
 
 First tap the floating keyboard button to hide any extra-key rows and Android's
 letter keyboard. These overlays cover the bottom gesture area, so a swipe starting
@@ -69,7 +95,7 @@ For a button instead of a gesture, use the optional
 existing rows, keeping the other keys. Open the extra-key bar, tap its gear, and
 paste the JSON into the **Extra keys config** preference. Save any custom
 layout first. This is an optional saved preference, not a change to the default
-Termux:X11 layout.
+Termux:X11 layout. These buttons work in desktop mode too.
 
 Tap **CLOSE** to send Omarchy's **Super+W** window-close shortcut. **Ctrl+W** is an
 application shortcut and is not a reliable way to close the active desktop window.
@@ -78,15 +104,15 @@ The **HOME** key sends the keyboard Home key; it does not return to the desktop.
 
 The mobile status bar stays below fullscreen windows, including when the shell
 remaps its surfaces after rotation. Normal windows still respect its reserved
-height and keep their usual navigation strip. The YouTube fullscreen rule belongs
-to the managed mobile block and is removed when switching back to desktop mode.
+height and keep their usual navigation strip.
 
-On the test tablet, the same running YouTube window filled 1752×2800 in portrait
-and 2800×1752 in landscape. In both orientations, a short bottom-center swipe
+With fullscreen explicitly enabled on the test tablet, the same running YouTube
+window filled 1752×2800 in portrait and 2800×1752 in landscape. In both orientations,
+a short bottom-center swipe
 returned Home, a tap did not navigate away, and no bottom space was reserved.
 Rotation and keyboard dismissal preserved the full display bounds. These checks
-used the installed local integration with the same QML and window rule; they do
-not cover multiple monitors or an APK built from the complete PR branch.
+used the installed local integration with the same QML; they do not cover multiple
+monitors or an APK built from the complete PR branch.
 The optional CLOSE button and the recent-apps card swipe each closed a disposable
 terminal on the portrait tablet while preserving the existing browser windows.
 Recent Apps opened from both a normal window and a fullscreen window with the
