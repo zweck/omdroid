@@ -18,12 +18,33 @@ import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
+import java.nio.file.Paths
 import java.nio.file.attribute.BasicFileAttributes
 
 class AssetExtractorTest {
 
     @TempDir
     lateinit var tempDir: File
+
+    /**
+     * Stands in for the `android.system.Os` syscall on the JVM: records every
+     * call and applies it with NIO, so the archive assertions still see real
+     * symbolic links on disk.
+     */
+    private class RecordingLinkCreator : LinkCreator {
+        val calls = mutableListOf<Pair<String, String>>()
+
+        override fun create(target: String, link: String) {
+            calls += target to link
+            val path = Paths.get(link)
+            path.parent?.let { Files.createDirectories(it) }
+            Files.deleteIfExists(path)
+            Files.createSymbolicLink(path, Paths.get(target))
+        }
+    }
+
+    /** Production constructs a no-arg extractor; JVM tests inject the seam. */
+    private fun newExtractor() = AssetExtractor(RecordingLinkCreator())
 
     /** The two container formats the extractor has to accept. */
     private enum class Codec { GZIP, ZSTD }
@@ -111,7 +132,7 @@ class AssetExtractorTest {
     }
 
     private fun extract(bytes: ByteArray, target: File = tempDir) {
-        AssetExtractor().extract(
+        newExtractor().extract(
             input = ByteArrayInputStream(bytes),
             totalBytes = bytes.size.toLong(),
             targetDir = target
@@ -123,7 +144,7 @@ class AssetExtractorTest {
         val content = "hello world".toByteArray()
         val archive = createTar(mapOf("test.txt" to content))
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -142,7 +163,7 @@ class AssetExtractorTest {
             "etc/config" to "key=value".toByteArray()
         ))
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -159,7 +180,7 @@ class AssetExtractorTest {
         val archive = createTar(mapOf("big.bin" to largeContent))
 
         val progressValues = mutableListOf<Int>()
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -180,7 +201,7 @@ class AssetExtractorTest {
 
         File(tempDir, ".extraction_complete").createNewFile()
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         val result = extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -199,7 +220,7 @@ class AssetExtractorTest {
             links = listOf("./usr/bin/ld" to "./usr/bin/ld.bfd")
         )
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -221,7 +242,7 @@ class AssetExtractorTest {
             links = listOf("./usr/bin/ld" to "./usr/bin/ld.bfd")
         )
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -241,7 +262,7 @@ class AssetExtractorTest {
             modes = mapOf("./usr/bin/ld.bfd" to 0b111_101_101)
         )
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -258,7 +279,7 @@ class AssetExtractorTest {
             links = listOf("./usr/bin/ld" to "./usr/bin/ld.bfd")
         )
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         val result = extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -278,7 +299,7 @@ class AssetExtractorTest {
             links = listOf("./usr/bin/ld" to "./usr/bin/ld.bfd")
         )
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         extractor.extract(
             input = ByteArrayInputStream(archive),
             totalBytes = archive.size.toLong(),
@@ -311,10 +332,79 @@ class AssetExtractorTest {
     }
 
     @Test
+    fun `extracts a directory file symlink and hard link member through the seam`() {
+        val payload = "#!/bin/sh\nexit 0\n".toByteArray()
+        val baos = ByteArrayOutputStream()
+        GZIPOutputStream(baos).use { gz ->
+            TarArchiveOutputStream(gz).use { tar ->
+                tar.putArchiveEntry(TarArchiveEntry("./usr/lib", TarConstants.LF_DIR))
+                tar.closeArchiveEntry()
+
+                val tool = TarArchiveEntry("./usr/lib/tool")
+                tool.mode = 0b111_101_101
+                tool.size = payload.size.toLong()
+                tar.putArchiveEntry(tool)
+                tar.write(payload)
+                tar.closeArchiveEntry()
+
+                val symlink = TarArchiveEntry("./usr/lib/tool-link", TarConstants.LF_SYMLINK)
+                symlink.linkName = "./usr/lib/tool"
+                tar.putArchiveEntry(symlink)
+                tar.closeArchiveEntry()
+
+                val hardlink = TarArchiveEntry("./usr/lib/tool-copy", TarConstants.LF_LINK)
+                hardlink.linkName = "./usr/lib/tool"
+                tar.putArchiveEntry(hardlink)
+                tar.closeArchiveEntry()
+            }
+        }
+        val archive = baos.toByteArray()
+        val links = RecordingLinkCreator()
+
+        AssetExtractor(links).extract(
+            input = ByteArrayInputStream(archive),
+            totalBytes = archive.size.toLong(),
+            targetDir = tempDir
+        )
+
+        val dir = File(tempDir, "usr/lib")
+        assertTrue(dir.isDirectory, "directory entry not created")
+        assertArrayEquals(payload, File(dir, "tool").readBytes(), "regular file bytes")
+        assertTrue(File(dir, "tool").canExecute(), "executable bit")
+
+        val call = links.calls.single()
+        assertEquals("./usr/lib/tool", call.first, "the seam must get the entry's linkName")
+        assertEquals(
+            File(dir, "tool-link").toPath().normalize().toString(),
+            File(call.second).toPath().normalize().toString(),
+            "the seam must get the link's own absolute path"
+        )
+        assertTrue(Files.isSymbolicLink(File(dir, "tool-link").toPath()))
+
+        val copy = File(dir, "tool-copy")
+        assertTrue(Files.isRegularFile(copy.toPath()), "hard link member missing")
+        assertArrayEquals(payload, copy.readBytes(), "hard link copy bytes")
+    }
+
+    @Test
+    fun `copies a file larger than the shared copy buffer intact`() {
+        val payload = ByteArray(600_000) { (it * 7).toByte() }
+        val archive = createTar(mapOf("./usr/share/big.bin" to payload))
+
+        newExtractor().extract(
+            input = ByteArrayInputStream(archive),
+            totalBytes = archive.size.toLong(),
+            targetDir = tempDir
+        )
+
+        assertArrayEquals(payload, File(tempDir, "usr/share/big.bin").readBytes())
+    }
+
+    @Test
     fun `rejects a stream that is neither gzip nor zstd`() {
         val bogus = byteArrayOf(0x00, 0x01, 0x02, 0x03, 0x04, 0x05)
         val thrown = assertThrows(IOException::class.java) {
-            AssetExtractor().extract(ByteArrayInputStream(bogus), bogus.size.toLong(), tempDir)
+            newExtractor().extract(ByteArrayInputStream(bogus), bogus.size.toLong(), tempDir)
         }
         assertTrue(thrown.message!!.contains("unknown image compression"), thrown.message)
         assertFalse(File(tempDir, ".extraction_complete").exists())
@@ -333,7 +423,7 @@ class AssetExtractorTest {
         val target = File(System.getenv("OMDROID_IMAGE_TARGET") ?: tempDir.path)
         val image = File(imagePath)
 
-        val extractor = AssetExtractor()
+        val extractor = newExtractor()
         image.inputStream().use { input ->
             extractor.extract(input, image.length(), target)
         }
