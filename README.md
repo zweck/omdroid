@@ -214,8 +214,11 @@ a file the shell re-reads in place.
   pointer reaches the monitor by itself) hand everything back to Android at once. Proven with a
   synthetic USB keyboard and mouse on the simulated display (`docs/omarchy/r8-dock-input-report.md`);
   logcat: `adb logcat -s KeyInterceptor:* | grep input:`.
-- **Not proven yet.** Samsung DeX and whether unplug survives Samsung's teardown; only a Samsung
-  phone can show those. The owner's dock test confirmed typing, the pointer and clicks; trackpad
+- **DeX fullscreen.** A Samsung tablet can reopen Omdroid as a floating task. Use its
+  fullscreen caption button or the explicit [ADB fullscreen helper](docs/omarchy/fullscreen.md)
+  before starting a receiver that detects its output size at startup.
+- **Not proven yet.** External-monitor Samsung DeX and whether unplug survives Samsung's
+  teardown; only a Samsung phone can show those. The owner's dock test confirmed typing, the pointer and clicks; trackpad
   gestures beyond those were tried by hand, not measured.
 - **Known limit.** A running session keeps the UI scale it started with: docked from the phone it
   stays at scale 2 (a 1080p monitor gets a 960x540 desktop), and a session started on the monitor

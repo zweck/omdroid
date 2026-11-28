@@ -26,3 +26,6 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew :app:test
+
+      - name: Fullscreen device-tool tests
+        run: python3 docs/omarchy/tools/test_fullscreen.py
