@@ -27,6 +27,7 @@ import com.phoshdroid.app.launch.DockStatus
 import com.phoshdroid.app.launch.DockStatusReader
 import com.phoshdroid.app.launch.FailedLaunch
 import com.phoshdroid.app.launch.FailedLaunchScreen
+import com.phoshdroid.app.launch.GpuModeRule
 import com.phoshdroid.app.launch.GuestOverlay
 import com.phoshdroid.app.launch.GuestOverlayAssets
 import com.phoshdroid.app.launch.KeyCapture
@@ -35,6 +36,7 @@ import com.phoshdroid.app.launch.LaunchDecision
 import com.phoshdroid.app.launch.LaunchReadiness
 import com.phoshdroid.app.launch.ReadyDecision
 import com.phoshdroid.app.launch.SessionPrep
+import com.phoshdroid.app.launch.SoftwareResolution
 import com.phoshdroid.app.launch.UiModeFile
 import com.phoshdroid.app.launch.UiScale
 import com.phoshdroid.app.launch.UiScaleFile
@@ -599,10 +601,45 @@ class LauncherActivity : AppCompatActivity() {
         // prediction below reads back, so the two agree.
         val dock = dockStatus()
         android.util.Log.i("Phoshdroid", DockState.logLine(dock))
+        // The predicted X root is computed before the Termux:X11 preferences because the
+        // software half-resolution rule needs the window the session will be shown in (its
+        // scale is resolved from that window). One prediction feeds XLORIE_WIDTH/HEIGHT, the
+        // guest's OMARCHY_OUTPUT_* hint and MainActivity's bottom margin (contract section 1).
+        geometry = computeGeometry()
+        // One display decision per session (SoftwareResolution): the GPU path the guest will
+        // actually rasterise on, the resolved UI scale, and the dock state. The Termux:X11
+        // preferences, the predicted X root, OMARCHY_SCALE and the live ui-scale file all read
+        // this one answer, so they cannot disagree.
+        val sessionPrefs = PhoshdroidPreferences(this)
+        val gpuMode = GpuModeRule.resolve(sessionPrefs.gpuMode, GpuModeRule.isKgslUsable())
+        val sessionDisplay =
+            SoftwareResolution.forSession(
+                gpu = gpuMode,
+                scale =
+                    UiScale.resolve(
+                        sessionPrefs.uiScale,
+                        targetDensityDpi(dock),
+                        minOf(winWidth, winHeight),
+                    ),
+                docked = dock.docked,
+            )
+        if (sessionDisplay.halfResolution) geometry = SoftwareResolution.xRoot(geometry)
+        logLaunch(
+            "display-mode ${sessionDisplay.resolutionMode} scale=${sessionDisplay.displayScale} " +
+                "gpu=${gpuMode.value} guest-scale=${sessionDisplay.guestScale} " +
+                "root=${geometry.width}x${geometry.height}",
+        )
         androidx.preference.PreferenceManager
             .getDefaultSharedPreferences(this)
             .edit()
             .putString("touchMode", "3")
+            // Software GPU mode rasterises on the CPU, so an undocked scale-2 session draws at
+            // half each axis and Xlorie upscales the texture to the surface (a quarter of the
+            // pixels for the same desktop; docs/omarchy/r11-memory.md). Every other case — the
+            // GPU path, scale 1, a docked monitor — keeps the native root. The guest agrees
+            // through OMARCHY_SCALE and the ui-scale file below.
+            .putString("displayResolutionMode", sessionDisplay.resolutionMode)
+            .putString("displayScale", sessionDisplay.displayScale)
             // Hardware keyboard and touchpad, r4-input K3 (docs/omarchy/r4-input-research.md
             // §2.2). This block is the only place that can set them: LoriePreferences is
             // android:enabled="false" in our manifest, so the submodule's own screen is
@@ -674,9 +711,9 @@ class LauncherActivity : AppCompatActivity() {
         SessionPrep(tmpDir).prepare(keepXServer = xServerStarted).forEach {
             android.util.Log.i("Phoshdroid", "launch: removed stale $it")
         }
-        // The predicted X root size; ProotService needs the same numbers for the
+        // The predicted X root size, decided above with the Termux:X11 preferences (halved on
+        // the software half-resolution path). ProotService needs the same numbers for the
         // guest's OMARCHY_OUTPUT_* env.
-        geometry = computeGeometry()
         val launchWidth = geometry.width
         val launchHeight = geometry.height
 
@@ -707,14 +744,11 @@ class LauncherActivity : AppCompatActivity() {
         // pinned mode is never overwritten.
         val ui = UiModeFile(rootfsDir).apply(dock.docked)
         logLaunch("ui ${ui.effective} ${ui.reason}")
-        // The scale follows the density of the display the desktop will be on
-        // (a3) unless the user chose one (contract section 4).
-        val sessionScale =
-            UiScale.resolve(
-                PhoshdroidPreferences(this).uiScale,
-                targetDensityDpi(dock),
-                minOf(winWidth, winHeight),
-            )
+        // The scale of the display the desktop will be on (a3) unless the user chose one
+        // (contract section 4). Software half resolution keeps the same desktop and runs the
+        // guest at scale 1 (SoftwareResolution), so OMARCHY_SCALE, this file and the Xlorie
+        // preferences all carry the decision taken above.
+        val sessionScale = sessionDisplay.guestScale
         // F6: the same number goes into the guest's live scale file, so the watcher's
         // baseline is what monitors.lua uses at start and only a later dock change moves it.
         val scaleOutcome =
@@ -723,7 +757,10 @@ class LauncherActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 null
             }
-        logLaunch("ui-scale $sessionScale ${if (scaleOutcome?.written == true) "written" else "kept"}")
+        logLaunch(
+            "ui-scale $sessionScale half=${sessionDisplay.halfResolution} " +
+                "${if (scaleOutcome?.written == true) "written" else "kept"}",
+        )
         val launchStartedAtMs = System.currentTimeMillis()
         ProotService.start(this, launchWidth, launchHeight, sessionScale, dock.launchDisplayId)
         logLaunch("session-started")
